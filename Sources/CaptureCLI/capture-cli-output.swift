@@ -58,7 +58,9 @@ extension CaptureCLI {
             contentsOf: [
                 .init(
                     "audio layout",
-                    audioMix.layout.rawValue
+                    audioMix.requiresAudioRendering
+                        ? CaptureAudioLayout.mixed.rawValue
+                        : audioMix.layout.rawValue
                 ),
                 .init(
                     "mic gain",
