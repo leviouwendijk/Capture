@@ -3,6 +3,7 @@ import Foundation
 enum CaptureCLIError: Error, LocalizedError {
     case missing(String)
     case invalidQuality(value: String, allowed: [String])
+    case invalidAudioLayout(value: String, allowed: [String])
 
     var errorDescription: String? {
         switch self {
@@ -11,6 +12,9 @@ enum CaptureCLIError: Error, LocalizedError {
 
         case .invalidQuality(let value, let allowed):
             return "Invalid quality preset: \(value). Expected one of: \(allowed.joined(separator: ", "))."
+
+        case .invalidAudioLayout(let value, let allowed):
+            return "Invalid audio layout: \(value). Expected one of: \(allowed.joined(separator: ", "))."
         }
     }
 }

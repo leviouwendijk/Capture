@@ -5,15 +5,18 @@ public struct CaptureAudioRecordingResult: Sendable, Codable, Hashable {
     public let output: URL
     public let device: CaptureDevice
     public let durationSeconds: Int
+    public let startedAt: Date
 
     public init(
         output: URL,
         device: CaptureDevice,
-        durationSeconds: Int
+        durationSeconds: Int,
+        startedAt: Date
     ) {
         self.output = output
         self.device = device
         self.durationSeconds = durationSeconds
+        self.startedAt = startedAt
     }
 }
 
@@ -41,6 +44,8 @@ public struct CoreAudioRecorder: Sendable {
             output: configuration.output
         )
 
+        let startedAt = Date()
+
         do {
             try recorder.start()
 
@@ -57,7 +62,8 @@ public struct CoreAudioRecorder: Sendable {
         return CaptureAudioRecordingResult(
             output: configuration.output,
             device: resolved.audioInput,
-            durationSeconds: options.durationSeconds
+            durationSeconds: options.durationSeconds,
+            startedAt: startedAt
         )
     }
 
@@ -105,7 +111,8 @@ public struct CoreAudioRecorder: Sendable {
                         startedAt
                     ).rounded()
                 )
-            )
+            ),
+            startedAt: startedAt
         )
     }
 }

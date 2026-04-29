@@ -3,12 +3,12 @@
   "failed_names" : [
 
   ],
-  "generated_at" : "2026-04-29T15:49:37Z",
+  "generated_at" : "2026-04-29T17:04:59Z",
   "passed" : 2,
   "results" : [
     {
       "display_name" : "configuration",
-      "duration_seconds" : 0.0026209354400634766,
+      "duration_seconds" : 0.0013370513916015625,
       "name" : "configuration",
       "status" : "passed",
       "tags" : [
@@ -18,7 +18,7 @@
     },
     {
       "display_name" : "device-provider",
-      "duration_seconds" : 0.0053490400314331055,
+      "duration_seconds" : 0.003184080123901367,
       "name" : "device-provider",
       "status" : "passed",
       "tags" : [

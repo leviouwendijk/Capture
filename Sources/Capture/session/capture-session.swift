@@ -8,6 +8,11 @@ public struct CaptureRecordingResult: Sendable, Codable, Hashable {
     public let video: CaptureResolvedVideoOptions
     public let videoDiagnostics: CaptureVideoRecordingDiagnostics
     public let audioTrackCount: Int
+    public let audioLayout: CaptureAudioLayout
+    public let microphoneGain: Double
+    public let systemGain: Double
+    public let microphoneStartOffsetSeconds: TimeInterval
+    public let systemAudioStartOffsetSeconds: TimeInterval?
     public let systemAudioSampleBufferCount: Int?
 
     public init(
@@ -17,6 +22,11 @@ public struct CaptureRecordingResult: Sendable, Codable, Hashable {
         video: CaptureResolvedVideoOptions,
         videoDiagnostics: CaptureVideoRecordingDiagnostics,
         audioTrackCount: Int,
+        audioLayout: CaptureAudioLayout,
+        microphoneGain: Double,
+        systemGain: Double,
+        microphoneStartOffsetSeconds: TimeInterval,
+        systemAudioStartOffsetSeconds: TimeInterval?,
         systemAudioSampleBufferCount: Int?
     ) {
         self.output = output
@@ -25,6 +35,11 @@ public struct CaptureRecordingResult: Sendable, Codable, Hashable {
         self.video = video
         self.videoDiagnostics = videoDiagnostics
         self.audioTrackCount = audioTrackCount
+        self.audioLayout = audioLayout
+        self.microphoneGain = microphoneGain
+        self.systemGain = systemGain
+        self.microphoneStartOffsetSeconds = microphoneStartOffsetSeconds
+        self.systemAudioStartOffsetSeconds = systemAudioStartOffsetSeconds
         self.systemAudioSampleBufferCount = systemAudioSampleBufferCount
     }
 }
@@ -33,15 +48,18 @@ public final class CaptureSession: Sendable {
     public let configuration: CaptureConfiguration
     public let options: CaptureRecordOptions
     public let deviceProvider: any CaptureDeviceProvider
+    public let progress: CaptureSessionProgressHandler?
 
     public init(
         configuration: CaptureConfiguration,
         options: CaptureRecordOptions = .standard,
-        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider()
+        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
+        progress: CaptureSessionProgressHandler? = nil
     ) {
         self.configuration = configuration
         self.options = options
         self.deviceProvider = deviceProvider
+        self.progress = progress
     }
 
     @discardableResult
@@ -97,6 +115,7 @@ public final class CaptureSession: Sendable {
             video: configuration.video,
             audio: configuration.audio,
             systemAudio: configuration.systemAudio,
+            audioMix: configuration.audioMix,
             container: .mov,
             output: videoOutput
         )
@@ -106,6 +125,7 @@ public final class CaptureSession: Sendable {
             video: configuration.video,
             audio: configuration.audio,
             systemAudio: configuration.systemAudio,
+            audioMix: configuration.audioMix,
             container: .mov,
             output: audioOutput
         )
@@ -115,6 +135,7 @@ public final class CaptureSession: Sendable {
             video: configuration.video,
             audio: configuration.audio,
             systemAudio: configuration.systemAudio,
+            audioMix: configuration.audioMix,
             container: .mov,
             output: systemAudioOutput
         )
@@ -140,34 +161,102 @@ public final class CaptureSession: Sendable {
         let capturedAudioResult = try await audioResult
         let capturedSystemAudioResult = try await systemAudioResult
 
-        var audioOutputs = [
-            audioOutput,
-        ]
+        let capturedDurationSeconds = [
+            capturedVideoResult.durationSeconds,
+            capturedAudioResult.durationSeconds,
+            capturedSystemAudioResult?.durationSeconds ?? 0,
+        ].max() ?? 0
 
-        if capturedSystemAudioResult != nil {
-            audioOutputs.append(
-                systemAudioOutput
+        await report(
+            .recordingStopped(
+                durationSeconds: TimeInterval(
+                    capturedDurationSeconds
+                )
+            )
+        )
+
+        let videoTimelineStart = capturedVideoResult.firstSampleAt
+            ?? capturedVideoResult.startedAt
+
+        let microphoneStartOffsetSeconds = normalizedTimelineOffset(
+            capturedAudioResult.startedAt.timeIntervalSince(
+                videoTimelineStart
+            )
+        )
+
+        let systemAudioStartOffsetSeconds = capturedSystemAudioResult.map { result in
+            if let videoPresentationTimeSeconds = capturedVideoResult.firstPresentationTimeSeconds,
+               let systemPresentationTimeSeconds = result.firstPresentationTimeSeconds {
+                return normalizedTimelineOffset(
+                    systemPresentationTimeSeconds - videoPresentationTimeSeconds
+                )
+            }
+
+            return normalizedTimelineOffset(
+                (
+                    result.firstSampleAt ?? result.startedAt
+                ).timeIntervalSince(
+                    videoTimelineStart
+                )
             )
         }
 
+        var audioInputs = [
+            CaptureMuxAudioInput(
+                url: audioOutput,
+                role: .microphone,
+                gain: configuration.audioMix.microphoneGain,
+                startOffsetSeconds: microphoneStartOffsetSeconds
+            ),
+        ]
+
+        if capturedSystemAudioResult != nil {
+            audioInputs.append(
+                CaptureMuxAudioInput(
+                    url: systemAudioOutput,
+                    role: .system,
+                    gain: configuration.audioMix.systemGain,
+                    startOffsetSeconds: systemAudioStartOffsetSeconds ?? 0
+                )
+            )
+        }
+
+        let exportMode: CaptureExportMode = configuration.audioMix.requiresAudioRendering
+            ? .rendering
+            : .passthrough
+
+        await report(
+            .exportStarted(
+                mode: exportMode
+            )
+        )
+
         try await CaptureAssetMuxer().mux(
             video: videoOutput,
-            audio: audioOutputs,
+            audio: audioInputs,
+            audioMix: configuration.audioMix,
             output: configuration.output,
             container: configuration.container
         )
 
+        await report(
+            .exportFinished(
+                mode: exportMode
+            )
+        )
+
         return CaptureRecordingResult(
             output: configuration.output,
-            durationSeconds: [
-                capturedVideoResult.durationSeconds,
-                capturedAudioResult.durationSeconds,
-                capturedSystemAudioResult?.durationSeconds ?? 0,
-            ].max() ?? 0,
+            durationSeconds: capturedDurationSeconds,
             videoFrameCount: capturedVideoResult.frameCount,
             video: capturedVideoResult.video,
             videoDiagnostics: capturedVideoResult.diagnostics,
-            audioTrackCount: audioOutputs.count,
+            audioTrackCount: audioInputs.count,
+            audioLayout: configuration.audioMix.layout,
+            microphoneGain: configuration.audioMix.microphoneGain,
+            systemGain: configuration.audioMix.systemGain,
+            microphoneStartOffsetSeconds: microphoneStartOffsetSeconds,
+            systemAudioStartOffsetSeconds: systemAudioStartOffsetSeconds,
             systemAudioSampleBufferCount: capturedSystemAudioResult?.sampleBufferCount
         )
     }
@@ -180,6 +269,32 @@ public final class CaptureSession: Sendable {
 }
 
 private extension CaptureSession {
+    func normalizedTimelineOffset(
+        _ offset: TimeInterval
+    ) -> TimeInterval {
+        guard offset.isFinite else {
+            return 0
+        }
+
+        if abs(offset) < 0.010 {
+            return 0
+        }
+
+        return offset
+    }
+
+    func report(
+        _ event: CaptureSessionProgress
+    ) async {
+        guard let progress else {
+            return
+        }
+
+        await progress(
+            event
+        )
+    }
+
     func recordSystemAudioIfNeeded(
         configuration: CaptureConfiguration,
         stopSignal: CaptureStopSignal
@@ -196,10 +311,40 @@ private extension CaptureSession {
     }
 }
 
+private enum CaptureMuxAudioRole: String, Sendable, Codable, Hashable {
+    case microphone
+    case system
+}
+
+private struct CaptureMuxAudioInput: Sendable, Codable, Hashable {
+    let url: URL
+    let role: CaptureMuxAudioRole
+    let gain: Double
+    let startOffsetSeconds: TimeInterval
+
+    init(
+        url: URL,
+        role: CaptureMuxAudioRole,
+        gain: Double,
+        startOffsetSeconds: TimeInterval
+    ) {
+        self.url = url
+        self.role = role
+        self.gain = gain
+        self.startOffsetSeconds = startOffsetSeconds
+    }
+}
+
+private struct CaptureMuxedAudioTrack {
+    let track: AVMutableCompositionTrack
+    let input: CaptureMuxAudioInput
+}
+
 private struct CaptureAssetMuxer: Sendable {
     func mux(
         video: URL,
-        audio: [URL],
+        audio: [CaptureMuxAudioInput],
+        audioMix: CaptureAudioMixOptions,
         output: URL,
         container: CaptureContainer
     ) async throws {
@@ -240,10 +385,19 @@ private struct CaptureAssetMuxer: Sendable {
             at: .zero
         )
 
-        for audioURL in audio {
-            try await addAudioTrack(
-                from: audioURL,
+        var audioTracks: [CaptureMuxedAudioTrack] = []
+
+        for audioInput in audio {
+            let audioTrack = try await addAudioTrack(
+                from: audioInput,
                 to: composition
+            )
+
+            audioTracks.append(
+                CaptureMuxedAudioTrack(
+                    track: audioTrack,
+                    input: audioInput
+                )
             )
         }
 
@@ -260,6 +414,10 @@ private struct CaptureAssetMuxer: Sendable {
             output: output,
             fileType: fileType(
                 for: container
+            ),
+            audioMix: makeAudioMix(
+                tracks: audioTracks,
+                options: audioMix
             )
         )
     }
@@ -267,11 +425,11 @@ private struct CaptureAssetMuxer: Sendable {
 
 private extension CaptureAssetMuxer {
     func addAudioTrack(
-        from audioURL: URL,
+        from input: CaptureMuxAudioInput,
         to composition: AVMutableComposition
-    ) async throws {
+    ) async throws -> AVMutableCompositionTrack {
         let audioAsset = AVURLAsset(
-            url: audioURL
+            url: input.url
         )
 
         let audioTracks = try await audioAsset.loadTracks(
@@ -280,7 +438,7 @@ private extension CaptureAssetMuxer {
 
         guard let sourceAudioTrack = audioTracks.first else {
             throw CaptureError.audioCapture(
-                "Could not find audio track in temporary recording \(audioURL.lastPathComponent)."
+                "Could not find \(input.role.rawValue) audio track in temporary recording \(input.url.lastPathComponent)."
             )
         }
 
@@ -289,7 +447,7 @@ private extension CaptureAssetMuxer {
             preferredTrackID: kCMPersistentTrackID_Invalid
         ) else {
             throw CaptureError.audioCapture(
-                "Could not create muxed audio track."
+                "Could not create muxed \(input.role.rawValue) audio track."
             )
         }
 
@@ -297,14 +455,83 @@ private extension CaptureAssetMuxer {
             .duration
         )
 
+        let preferredTimescale = CMTimeScale(
+            max(
+                audioDuration.timescale,
+                600
+            )
+        )
+
+        let absoluteOffset = CMTime(
+            seconds: abs(
+                input.startOffsetSeconds
+            ),
+            preferredTimescale: preferredTimescale
+        )
+
+        let sourceStart: CMTime
+        let destinationStart: CMTime
+
+        if input.startOffsetSeconds < 0 {
+            sourceStart = absoluteOffset
+            destinationStart = .zero
+        } else {
+            sourceStart = .zero
+            destinationStart = absoluteOffset
+        }
+
+        let availableDuration = CMTimeSubtract(
+            audioDuration,
+            sourceStart
+        )
+
+        guard CMTimeCompare(
+            availableDuration,
+            .zero
+        ) > 0 else {
+            throw CaptureError.audioCapture(
+                "Could not align \(input.role.rawValue) audio track; computed source start exceeds audio duration."
+            )
+        }
+
         try audioTrack.insertTimeRange(
             CMTimeRange(
-                start: .zero,
-                duration: audioDuration
+                start: sourceStart,
+                duration: availableDuration
             ),
             of: sourceAudioTrack,
-            at: .zero
+            at: destinationStart
         )
+
+        return audioTrack
+    }
+
+    func makeAudioMix(
+        tracks: [CaptureMuxedAudioTrack],
+        options: CaptureAudioMixOptions
+    ) -> AVMutableAudioMix? {
+        guard options.requiresAudioRendering else {
+            return nil
+        }
+
+        let mix = AVMutableAudioMix()
+
+        mix.inputParameters = tracks.map { muxedTrack in
+            let parameters = AVMutableAudioMixInputParameters(
+                track: muxedTrack.track
+            )
+
+            parameters.setVolume(
+                Float(
+                    muxedTrack.input.gain
+                ),
+                at: .zero
+            )
+
+            return parameters
+        }
+
+        return mix
     }
 
     func fileType(
@@ -322,20 +549,30 @@ private extension CaptureAssetMuxer {
     func export(
         composition: AVMutableComposition,
         output: URL,
-        fileType: AVFileType
+        fileType: AVFileType,
+        audioMix: AVMutableAudioMix?
     ) async throws {
+        let presetName: String
+
+        if audioMix == nil {
+            presetName = AVAssetExportPresetPassthrough
+        } else {
+            presetName = AVAssetExportPresetHighestQuality
+        }
+
         guard let exporter = AVAssetExportSession(
             asset: composition,
-            presetName: AVAssetExportPresetPassthrough
+            presetName: presetName
         ) else {
             throw CaptureError.videoCapture(
-                "Could not create passthrough asset exporter."
+                "Could not create asset exporter."
             )
         }
 
         exporter.outputURL = output
         exporter.outputFileType = fileType
         exporter.shouldOptimizeForNetworkUse = false
+        exporter.audioMix = audioMix
 
         await withCheckedContinuation { continuation in
             exporter.exportAsynchronously {
@@ -360,3 +597,23 @@ private extension CaptureAssetMuxer {
         return "\(nsError.localizedDescription) domain=\(nsError.domain) code=\(nsError.code) userInfo=\(nsError.userInfo)"
     }
 }
+
+public enum CaptureExportMode: String, Sendable, Codable, Hashable {
+    case passthrough
+    case rendering
+}
+
+public enum CaptureSessionProgress: Sendable, Codable, Hashable {
+    case recordingStopped(
+        durationSeconds: TimeInterval
+    )
+    case exportStarted(
+        mode: CaptureExportMode
+    )
+    case exportFinished(
+        mode: CaptureExportMode
+    )
+}
+
+public typealias CaptureSessionProgressHandler =
+    @Sendable (CaptureSessionProgress) async -> Void

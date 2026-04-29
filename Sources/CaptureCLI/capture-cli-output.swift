@@ -16,6 +16,7 @@ extension CaptureCLI {
         output: URL,
         audioName: String?,
         systemAudioEnabled: Bool,
+        audioMix: CaptureAudioMixOptions,
         video: CaptureResolvedVideoOptions,
         limitSeconds: Int?
     ) -> [String] {
@@ -51,6 +52,27 @@ extension CaptureCLI {
                 "system audio",
                 systemAudioEnabled ? "enabled" : "disabled"
             )
+        )
+
+        fields.append(
+            contentsOf: [
+                .init(
+                    "audio layout",
+                    audioMix.layout.rawValue
+                ),
+                .init(
+                    "mic gain",
+                    gainDescription(
+                        audioMix.microphoneGain
+                    )
+                ),
+                .init(
+                    "system gain",
+                    gainDescription(
+                        audioMix.systemGain
+                    )
+                ),
+            ]
         )
 
         fields.append(
@@ -118,13 +140,51 @@ extension CaptureCLI {
             at: 3
         )
 
+        fields.insert(
+            .init(
+                "audio layout",
+                result.audioLayout.rawValue
+            ),
+            at: 4
+        )
+
+        fields.insert(
+            .init(
+                "mic gain",
+                gainDescription(
+                    result.microphoneGain
+                )
+            ),
+            at: 5
+        )
+
+        fields.insert(
+            .init(
+                "system gain",
+                gainDescription(
+                    result.systemGain
+                )
+            ),
+            at: 6
+        )
+
+        fields.insert(
+            .init(
+                "audio offsets",
+                audioOffsetDescription(
+                    result
+                )
+            ),
+            at: 7
+        )
+
         if let systemAudioSampleBufferCount = result.systemAudioSampleBufferCount {
             fields.insert(
                 .init(
                     "system samples",
                     "\(systemAudioSampleBufferCount)"
                 ),
-                at: 4
+                at: 8
             )
         }
 
@@ -373,6 +433,34 @@ private extension CaptureCLI {
     ) -> String {
         String(
             format: "%.1f",
+            value
+        )
+    }
+
+    static func audioOffsetDescription(
+        _ result: CaptureRecordingResult
+    ) -> String {
+        let systemOffset = result.systemAudioStartOffsetSeconds
+            .map(syncOffsetDescription)
+            ?? "none"
+
+        return "mic=\(syncOffsetDescription(result.microphoneStartOffsetSeconds)) system=\(systemOffset)"
+    }
+
+    static func syncOffsetDescription(
+        _ value: TimeInterval
+    ) -> String {
+        String(
+            format: "%+.3fs",
+            value
+        )
+    }
+
+    static func gainDescription(
+        _ value: Double
+    ) -> String {
+        String(
+            format: "%.2fx",
             value
         )
     }

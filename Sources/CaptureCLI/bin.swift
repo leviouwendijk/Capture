@@ -150,6 +150,24 @@ private extension CaptureCLI {
                 )
 
                 opt(
+                    "audio-layout",
+                    as: String.self,
+                    help: "Audio layout: separate or mixed. Defaults to separate."
+                )
+
+                opt(
+                    "mic-gain",
+                    as: Double.self,
+                    help: "Microphone gain multiplier. Defaults to 1.0."
+                )
+
+                opt(
+                    "system-gain",
+                    as: Double.self,
+                    help: "System audio gain multiplier. Defaults to 1.0."
+                )
+
+                opt(
                     "output",
                     short: "o",
                     as: String.self,
@@ -460,6 +478,7 @@ private extension CaptureCLI {
         output: URL,
         audioName: String,
         systemAudioEnabled: Bool,
+        audioMix: CaptureAudioMixOptions,
         video: CaptureResolvedVideoOptions
     ) -> TerminalLiveStatusLine {
         TerminalLiveStatusLine(
@@ -470,6 +489,7 @@ private extension CaptureCLI {
                 output: output,
                 audioName: audioName,
                 systemAudioEnabled: systemAudioEnabled,
+                audioMix: audioMix,
                 video: video,
                 limitSeconds: limitSeconds
             )
@@ -536,6 +556,20 @@ private extension CaptureCLI {
             default: false
         )
 
+        let audioMix = try CaptureAudioMixOptions(
+            layout: audioLayout(
+                invocation: invocation
+            ),
+            microphoneGain: try invocation.value(
+                "mic-gain",
+                as: Double.self
+            ) ?? 1.0,
+            systemGain: try invocation.value(
+                "system-gain",
+                as: Double.self
+            ) ?? 1.0
+        )
+
         let cursor = try invocation.flag(
             "cursor",
             default: true
@@ -564,6 +598,7 @@ private extension CaptureCLI {
             video: video,
             audio: audio,
             systemAudio: systemAudio,
+            audioMix: audioMix,
             container: try container(
                 for: output
             ),
@@ -577,35 +612,44 @@ private extension CaptureCLI {
         )
 
         if let durationSeconds {
+            let timer = recordingTimer(
+                limitSeconds: durationSeconds,
+                output: output,
+                audioName: audioName,
+                systemAudioEnabled: systemAudioEnabled,
+                audioMix: audioMix,
+                video: resolvedVideo
+            )
+
+            let progressRenderer = CaptureCLIProgressRenderer(
+                recordingTimer: timer,
+                output: output
+            )
+
             let session = CaptureSession(
                 configuration: configuration,
                 options: try CaptureRecordOptions(
                     durationSeconds: durationSeconds
                 ),
                 deviceProvider: provider
-            )
-            let timer = recordingTimer(
-                limitSeconds: durationSeconds,
-                output: output,
-                audioName: audioName,
-                systemAudioEnabled: systemAudioEnabled,
-                video: resolvedVideo
-            )
+            ) { progress in
+                await progressRenderer.handle(
+                    progress
+                )
+            }
 
             await timer.start()
 
             do {
                 let result = try await session.start()
 
-                await timer.stop(
-                    finalLine: "time: \(TerminalDurationFormatter.format(TimeInterval(result.durationSeconds)))"
-                )
+                await progressRenderer.finishAfterSuccess()
 
                 writeRecordingSummary(
                     result: result
                 )
             } catch {
-                await timer.stop()
+                await progressRenderer.finishAfterError()
                 throw error
             }
         } else {
@@ -613,17 +657,29 @@ private extension CaptureCLI {
             let listener = CaptureCLIStopListener(
                 stopSignal: stopSignal
             )
-            let session = CaptureSession(
-                configuration: configuration,
-                deviceProvider: provider
-            )
+
             let timer = recordingTimer(
                 limitSeconds: nil,
                 output: output,
                 audioName: audioName,
                 systemAudioEnabled: systemAudioEnabled,
+                audioMix: audioMix,
                 video: resolvedVideo
             )
+
+            let progressRenderer = CaptureCLIProgressRenderer(
+                recordingTimer: timer,
+                output: output
+            )
+
+            let session = CaptureSession(
+                configuration: configuration,
+                deviceProvider: provider
+            ) { progress in
+                await progressRenderer.handle(
+                    progress
+                )
+            }
 
             listener.start()
             await timer.start()
@@ -633,17 +689,16 @@ private extension CaptureCLI {
                     stopSignal: stopSignal
                 )
 
-                await timer.stop(
-                    finalLine: "time: \(TerminalDurationFormatter.format(TimeInterval(result.durationSeconds)))"
-                )
                 listener.stop()
+
+                await progressRenderer.finishAfterSuccess()
 
                 writeRecordingSummary(
                     result: result
                 )
             } catch {
-                await timer.stop()
                 listener.stop()
+                await progressRenderer.finishAfterError()
                 throw error
             }
         }
@@ -668,6 +723,26 @@ private extension CaptureCLI {
         return try configuration.video.resolved(
             displaySize: size
         )
+    }
+
+    static func audioLayout(
+        invocation: ParsedInvocation
+    ) throws -> CaptureAudioLayout {
+        let value = try invocation.value(
+            "audio-layout",
+            as: String.self
+        ) ?? CaptureAudioLayout.separate.rawValue
+
+        guard let layout = CaptureAudioLayout(
+            rawValue: value.lowercased()
+        ) else {
+            throw CaptureCLIError.invalidAudioLayout(
+                value: value,
+                allowed: CaptureAudioLayout.allCases.map(\.rawValue)
+            )
+        }
+
+        return layout
     }
 
     static func videoQuality(

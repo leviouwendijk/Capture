@@ -7,15 +7,24 @@ public struct CaptureSystemAudioRecordingResult: Sendable, Codable, Hashable {
     public let output: URL
     public let durationSeconds: Int
     public let sampleBufferCount: Int
+    public let startedAt: Date
+    public let firstSampleAt: Date?
+    public let firstPresentationTimeSeconds: Double?
 
     public init(
         output: URL,
         durationSeconds: Int,
-        sampleBufferCount: Int
+        sampleBufferCount: Int,
+        startedAt: Date,
+        firstSampleAt: Date?,
+        firstPresentationTimeSeconds: Double?
     ) {
         self.output = output
         self.durationSeconds = durationSeconds
         self.sampleBufferCount = sampleBufferCount
+        self.startedAt = startedAt
+        self.firstSampleAt = firstSampleAt
+        self.firstPresentationTimeSeconds = firstPresentationTimeSeconds
     }
 }
 
@@ -107,7 +116,7 @@ public struct ScreenCaptureSystemAudioRecorder: Sendable {
                 startedAt
             )
 
-            let sampleBufferCount = try await writer.finish()
+            let finishResult = try await writer.finish()
 
             return CaptureSystemAudioRecordingResult(
                 output: configuration.output,
@@ -117,7 +126,10 @@ public struct ScreenCaptureSystemAudioRecorder: Sendable {
                         duration.rounded()
                     )
                 ),
-                sampleBufferCount: sampleBufferCount
+                sampleBufferCount: finishResult.sampleBufferCount,
+                startedAt: startedAt,
+                firstSampleAt: finishResult.firstSampleAt,
+                firstPresentationTimeSeconds: finishResult.firstPresentationTimeSeconds
             )
         } catch {
             if streamDidStart {
@@ -219,6 +231,12 @@ private final class ScreenCaptureSystemAudioStreamOutput: NSObject, SCStreamOutp
     }
 }
 
+private struct ScreenCaptureSystemAudioWriterFinishResult {
+    let sampleBufferCount: Int
+    let firstSampleAt: Date?
+    let firstPresentationTimeSeconds: Double?
+}
+
 private final class ScreenCaptureSystemAudioWriter: @unchecked Sendable {
     private let writer: AVAssetWriter
     private let input: AVAssetWriterInput
@@ -227,6 +245,8 @@ private final class ScreenCaptureSystemAudioWriter: @unchecked Sendable {
     private var started = false
     private var finished = false
     private var sampleBufferCount = 0
+    private var firstSampleAt: Date?
+    private var firstPresentationTimeSeconds: Double?
     private var lastPresentationTime: CMTime?
     private var failure: Error?
 
@@ -302,6 +322,13 @@ private final class ScreenCaptureSystemAudioWriter: @unchecked Sendable {
             return
         }
 
+        if firstSampleAt == nil {
+            firstSampleAt = Date()
+            firstPresentationTimeSeconds = CMTimeGetSeconds(
+                presentationTime
+            )
+        }
+
         if !started {
             guard writer.startWriting() else {
                 failure = writer.error.map(Self.describe)
@@ -352,17 +379,17 @@ private final class ScreenCaptureSystemAudioWriter: @unchecked Sendable {
         lock.unlock()
     }
 
-    func finish() async throws -> Int {
-        let capturedSampleBufferCount = try prepareFinish()
+    func finish() async throws -> ScreenCaptureSystemAudioWriterFinishResult {
+        let result = try prepareFinish()
 
         try await finishWriting()
 
-        return capturedSampleBufferCount
+        return result
     }
 }
 
 private extension ScreenCaptureSystemAudioWriter {
-    func prepareFinish() throws -> Int {
+    func prepareFinish() throws -> ScreenCaptureSystemAudioWriterFinishResult {
         lock.lock()
 
         if let failure {
@@ -390,11 +417,15 @@ private extension ScreenCaptureSystemAudioWriter {
         input.markAsFinished()
         finished = true
 
-        let capturedSampleBufferCount = sampleBufferCount
+        let result = ScreenCaptureSystemAudioWriterFinishResult(
+            sampleBufferCount: sampleBufferCount,
+            firstSampleAt: firstSampleAt,
+            firstPresentationTimeSeconds: firstPresentationTimeSeconds
+        )
 
         lock.unlock()
 
-        return capturedSampleBufferCount
+        return result
     }
 
     func finishWriting() async throws {

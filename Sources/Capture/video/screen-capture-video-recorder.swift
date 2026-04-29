@@ -11,6 +11,9 @@ public struct CaptureVideoRecordingResult: Sendable, Codable, Hashable {
     public let frameCount: Int
     public let video: CaptureResolvedVideoOptions
     public let diagnostics: CaptureVideoRecordingDiagnostics
+    public let startedAt: Date
+    public let firstSampleAt: Date?
+    public let firstPresentationTimeSeconds: Double?
 
     public init(
         output: URL,
@@ -18,7 +21,10 @@ public struct CaptureVideoRecordingResult: Sendable, Codable, Hashable {
         durationSeconds: Int,
         frameCount: Int,
         video: CaptureResolvedVideoOptions,
-        diagnostics: CaptureVideoRecordingDiagnostics
+        diagnostics: CaptureVideoRecordingDiagnostics,
+        startedAt: Date,
+        firstSampleAt: Date?,
+        firstPresentationTimeSeconds: Double?
     ) {
         self.output = output
         self.display = display
@@ -26,6 +32,9 @@ public struct CaptureVideoRecordingResult: Sendable, Codable, Hashable {
         self.frameCount = frameCount
         self.video = video
         self.diagnostics = diagnostics
+        self.startedAt = startedAt
+        self.firstSampleAt = firstSampleAt
+        self.firstPresentationTimeSeconds = firstPresentationTimeSeconds
     }
 }
 
@@ -147,7 +156,10 @@ public struct ScreenCaptureVideoRecorder: Sendable {
                 ),
                 frameCount: frameCount,
                 video: resolvedVideo,
-                diagnostics: diagnostics
+                diagnostics: diagnostics,
+                startedAt: startedAt,
+                firstSampleAt: streamOutput.firstCompleteSampleAt(),
+                firstPresentationTimeSeconds: streamOutput.firstCompleteFramePresentationTimeSeconds()
             )
         } catch {
             if streamDidStart {
@@ -274,7 +286,10 @@ public struct ScreenCaptureVideoRecorder: Sendable {
                 ),
                 frameCount: frameCount,
                 video: resolvedVideo,
-                diagnostics: diagnostics
+                diagnostics: diagnostics,
+                startedAt: startedAt,
+                firstSampleAt: streamOutput.firstCompleteSampleAt(),
+                firstPresentationTimeSeconds: streamOutput.firstCompleteFramePresentationTimeSeconds()
             )
         } catch {
             if streamDidStart {
@@ -383,6 +398,8 @@ private final class ScreenCaptureVideoStreamOutput: NSObject, SCStreamOutput, SC
     private var validSampleCount = 0
     private var readySampleCount = 0
     private var completeFrameStatusCount = 0
+    private var capturedFirstCompleteSampleAt: Date?
+    private var capturedFirstCompleteFramePresentationTimeSeconds: Double?
     private var incompleteFrameStatusCount = 0
     private var missingFrameStatusCount = 0
     private var frameStatusRawValueCounts: [Int: Int] = [:]
@@ -423,7 +440,9 @@ private final class ScreenCaptureVideoStreamOutput: NSObject, SCStreamOutput, SC
             for: sampleBuffer
         ) {
         case .complete:
-            recordCompleteFrameStatus()
+            recordCompleteFrameStatus(
+                sampleBuffer: sampleBuffer
+            )
 
         case .incomplete(let rawValue):
             recordIncompleteFrameStatus(
@@ -462,6 +481,22 @@ private final class ScreenCaptureVideoStreamOutput: NSObject, SCStreamOutput, SC
         writer.fail(
             error
         )
+    }
+
+    func firstCompleteSampleAt() -> Date? {
+        lock.lock()
+        let value = capturedFirstCompleteSampleAt
+        lock.unlock()
+
+        return value
+    }
+
+    func firstCompleteFramePresentationTimeSeconds() -> Double? {
+        lock.lock()
+        let value = capturedFirstCompleteFramePresentationTimeSeconds
+        lock.unlock()
+
+        return value
     }
 
     func diagnostics(
@@ -552,9 +587,27 @@ private extension ScreenCaptureVideoStreamOutput {
         return .complete
     }
 
-    func recordCompleteFrameStatus() {
+    func recordCompleteFrameStatus(
+        sampleBuffer: CMSampleBuffer
+    ) {
         lock.lock()
+
+        if capturedFirstCompleteSampleAt == nil {
+            capturedFirstCompleteSampleAt = Date()
+
+            let presentationTime = CMSampleBufferGetPresentationTimeStamp(
+                sampleBuffer
+            )
+
+            if presentationTime.isValid {
+                capturedFirstCompleteFramePresentationTimeSeconds = CMTimeGetSeconds(
+                    presentationTime
+                )
+            }
+        }
+
         completeFrameStatusCount += 1
+
         lock.unlock()
     }
 
