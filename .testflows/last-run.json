@@ -1,0 +1,33 @@
+{
+  "failed" : 0,
+  "failed_names" : [
+
+  ],
+  "generated_at" : "2026-04-29T11:25:43Z",
+  "passed" : 2,
+  "results" : [
+    {
+      "display_name" : "configuration",
+      "duration_seconds" : 0.001752018928527832,
+      "name" : "configuration",
+      "status" : "passed",
+      "tags" : [
+        "configuration",
+        "model"
+      ]
+    },
+    {
+      "display_name" : "device-provider",
+      "duration_seconds" : 0.006693005561828613,
+      "name" : "device-provider",
+      "status" : "passed",
+      "tags" : [
+        "devices",
+        "provider"
+      ]
+    }
+  ],
+  "skipped" : 0,
+  "title" : "Capture",
+  "total" : 2
+}
