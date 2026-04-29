@@ -145,6 +145,6 @@ I tried doing this with `ffmpeg`, but it caused audio underruns I could not (and
 
 ## Ideas
 
-[ ] multi-input support (audio, screens)
-[ ] multi-ouput rendering (summing, gain, routing (DSL?)) 
-[ ] prepending sine wave in recording, video flicker (synchronization)
+* [ ] multi-input support (audio, screens)
+* [ ] multi-ouput rendering (summing, gain, routing (DSL?))
+* [ ] prepending sine wave in recording, video flicker (synchronization)
