@@ -142,3 +142,9 @@ capturer audio \
 ## Background
 
 I tried doing this with `ffmpeg`, but it caused audio underruns I could not (and want not) resolve. Still looking for a CLI option, and this is a light implementation over native APIs. 
+
+## Ideas
+
+[ ] multi-input support (audio, screens)
+[ ] multi-ouput rendering (summing, gain, routing (DSL?)) 
+[ ] prepending sine wave in recording, video flicker (synchronization)
