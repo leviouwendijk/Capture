@@ -16,6 +16,10 @@ struct ScreenCaptureDeviceList: Sendable {
                 let id = String(
                     display.displayID
                 )
+                let size = CaptureVideoSize(
+                    width: display.width,
+                    height: display.height
+                )
                 let name: String
 
                 if display.displayID == mainDisplayID {
@@ -28,7 +32,8 @@ struct ScreenCaptureDeviceList: Sendable {
                     id: id,
                     name: name,
                     kind: .display,
-                    detail: "\(display.width)x\(display.height)"
+                    detail: size.label,
+                    size: size
                 )
             }
     }

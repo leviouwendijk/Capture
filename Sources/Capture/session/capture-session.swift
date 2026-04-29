@@ -5,15 +5,27 @@ public struct CaptureRecordingResult: Sendable, Codable, Hashable {
     public let output: URL
     public let durationSeconds: Int
     public let videoFrameCount: Int
+    public let video: CaptureResolvedVideoOptions
+    public let videoDiagnostics: CaptureVideoRecordingDiagnostics
+    public let audioTrackCount: Int
+    public let systemAudioSampleBufferCount: Int?
 
     public init(
         output: URL,
         durationSeconds: Int,
-        videoFrameCount: Int
+        videoFrameCount: Int,
+        video: CaptureResolvedVideoOptions,
+        videoDiagnostics: CaptureVideoRecordingDiagnostics,
+        audioTrackCount: Int,
+        systemAudioSampleBufferCount: Int?
     ) {
         self.output = output
         self.durationSeconds = durationSeconds
         self.videoFrameCount = videoFrameCount
+        self.video = video
+        self.videoDiagnostics = videoDiagnostics
+        self.audioTrackCount = audioTrackCount
+        self.systemAudioSampleBufferCount = systemAudioSampleBufferCount
     }
 }
 
@@ -76,11 +88,15 @@ public final class CaptureSession: Sendable {
         let audioOutput = workingDirectory.appendingPathComponent(
             "audio.wav"
         )
+        let systemAudioOutput = workingDirectory.appendingPathComponent(
+            "system-audio.m4a"
+        )
 
         let videoConfiguration = try CaptureConfiguration(
             display: configuration.display,
             video: configuration.video,
             audio: configuration.audio,
+            systemAudio: configuration.systemAudio,
             container: .mov,
             output: videoOutput
         )
@@ -89,8 +105,18 @@ public final class CaptureSession: Sendable {
             display: configuration.display,
             video: configuration.video,
             audio: configuration.audio,
+            systemAudio: configuration.systemAudio,
             container: .mov,
             output: audioOutput
+        )
+
+        let systemAudioConfiguration = try CaptureConfiguration(
+            display: configuration.display,
+            video: configuration.video,
+            audio: configuration.audio,
+            systemAudio: configuration.systemAudio,
+            container: .mov,
+            output: systemAudioOutput
         )
 
         async let videoResult = ScreenCaptureVideoRecorder().recordVideoUntilStopped(
@@ -105,23 +131,44 @@ public final class CaptureSession: Sendable {
             deviceProvider: deviceProvider
         )
 
+        async let systemAudioResult = recordSystemAudioIfNeeded(
+            configuration: systemAudioConfiguration,
+            stopSignal: stopSignal
+        )
+
         let capturedVideoResult = try await videoResult
         let capturedAudioResult = try await audioResult
+        let capturedSystemAudioResult = try await systemAudioResult
+
+        var audioOutputs = [
+            audioOutput,
+        ]
+
+        if capturedSystemAudioResult != nil {
+            audioOutputs.append(
+                systemAudioOutput
+            )
+        }
 
         try await CaptureAssetMuxer().mux(
             video: videoOutput,
-            audio: audioOutput,
+            audio: audioOutputs,
             output: configuration.output,
             container: configuration.container
         )
 
         return CaptureRecordingResult(
             output: configuration.output,
-            durationSeconds: max(
+            durationSeconds: [
                 capturedVideoResult.durationSeconds,
-                capturedAudioResult.durationSeconds
-            ),
-            videoFrameCount: capturedVideoResult.frameCount
+                capturedAudioResult.durationSeconds,
+                capturedSystemAudioResult?.durationSeconds ?? 0,
+            ].max() ?? 0,
+            videoFrameCount: capturedVideoResult.frameCount,
+            video: capturedVideoResult.video,
+            videoDiagnostics: capturedVideoResult.diagnostics,
+            audioTrackCount: audioOutputs.count,
+            systemAudioSampleBufferCount: capturedSystemAudioResult?.sampleBufferCount
         )
     }
 
@@ -132,10 +179,27 @@ public final class CaptureSession: Sendable {
     }
 }
 
+private extension CaptureSession {
+    func recordSystemAudioIfNeeded(
+        configuration: CaptureConfiguration,
+        stopSignal: CaptureStopSignal
+    ) async throws -> CaptureSystemAudioRecordingResult? {
+        guard configuration.systemAudio.enabled else {
+            return nil
+        }
+
+        return try await ScreenCaptureSystemAudioRecorder().recordSystemAudioUntilStopped(
+            configuration: configuration,
+            stopSignal: stopSignal,
+            deviceProvider: deviceProvider
+        )
+    }
+}
+
 private struct CaptureAssetMuxer: Sendable {
     func mux(
         video: URL,
-        audio: URL,
+        audio: [URL],
         output: URL,
         container: CaptureContainer
     ) async throws {
@@ -143,26 +207,14 @@ private struct CaptureAssetMuxer: Sendable {
         let videoAsset = AVURLAsset(
             url: video
         )
-        let audioAsset = AVURLAsset(
-            url: audio
-        )
 
         let videoTracks = try await videoAsset.loadTracks(
             withMediaType: .video
-        )
-        let audioTracks = try await audioAsset.loadTracks(
-            withMediaType: .audio
         )
 
         guard let sourceVideoTrack = videoTracks.first else {
             throw CaptureError.videoCapture(
                 "Could not find video track in temporary recording."
-            )
-        }
-
-        guard let sourceAudioTrack = audioTracks.first else {
-            throw CaptureError.audioCapture(
-                "Could not find audio track in temporary recording."
             )
         }
 
@@ -175,19 +227,7 @@ private struct CaptureAssetMuxer: Sendable {
             )
         }
 
-        guard let audioTrack = composition.addMutableTrack(
-            withMediaType: .audio,
-            preferredTrackID: kCMPersistentTrackID_Invalid
-        ) else {
-            throw CaptureError.audioCapture(
-                "Could not create muxed audio track."
-            )
-        }
-
         let videoDuration = try await videoAsset.load(
-            .duration
-        )
-        let audioDuration = try await audioAsset.load(
             .duration
         )
 
@@ -200,14 +240,12 @@ private struct CaptureAssetMuxer: Sendable {
             at: .zero
         )
 
-        try audioTrack.insertTimeRange(
-            CMTimeRange(
-                start: .zero,
-                duration: audioDuration
-            ),
-            of: sourceAudioTrack,
-            at: .zero
-        )
+        for audioURL in audio {
+            try await addAudioTrack(
+                from: audioURL,
+                to: composition
+            )
+        }
 
         if FileManager.default.fileExists(
             atPath: output.path
@@ -228,6 +266,47 @@ private struct CaptureAssetMuxer: Sendable {
 }
 
 private extension CaptureAssetMuxer {
+    func addAudioTrack(
+        from audioURL: URL,
+        to composition: AVMutableComposition
+    ) async throws {
+        let audioAsset = AVURLAsset(
+            url: audioURL
+        )
+
+        let audioTracks = try await audioAsset.loadTracks(
+            withMediaType: .audio
+        )
+
+        guard let sourceAudioTrack = audioTracks.first else {
+            throw CaptureError.audioCapture(
+                "Could not find audio track in temporary recording \(audioURL.lastPathComponent)."
+            )
+        }
+
+        guard let audioTrack = composition.addMutableTrack(
+            withMediaType: .audio,
+            preferredTrackID: kCMPersistentTrackID_Invalid
+        ) else {
+            throw CaptureError.audioCapture(
+                "Could not create muxed audio track."
+            )
+        }
+
+        let audioDuration = try await audioAsset.load(
+            .duration
+        )
+
+        try audioTrack.insertTimeRange(
+            CMTimeRange(
+                start: .zero,
+                duration: audioDuration
+            ),
+            of: sourceAudioTrack,
+            at: .zero
+        )
+    }
+
     func fileType(
         for container: CaptureContainer
     ) -> AVFileType {
@@ -247,16 +326,16 @@ private extension CaptureAssetMuxer {
     ) async throws {
         guard let exporter = AVAssetExportSession(
             asset: composition,
-            presetName: AVAssetExportPresetHighestQuality
+            presetName: AVAssetExportPresetPassthrough
         ) else {
             throw CaptureError.videoCapture(
-                "Could not create asset exporter."
+                "Could not create passthrough asset exporter."
             )
         }
 
         exporter.outputURL = output
         exporter.outputFileType = fileType
-        exporter.shouldOptimizeForNetworkUse = true
+        exporter.shouldOptimizeForNetworkUse = false
 
         await withCheckedContinuation { continuation in
             exporter.exportAsynchronously {

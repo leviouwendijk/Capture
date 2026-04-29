@@ -152,7 +152,11 @@ extension CaptureFlowSuite {
                     id: "display-1",
                     name: "Main Display",
                     kind: .display,
-                    detail: "1920x1080"
+                    detail: "1920x1080",
+                    size: CaptureVideoSize(
+                        width: 1920,
+                        height: 1080
+                    )
                 ),
             ],
             audioInputs: [

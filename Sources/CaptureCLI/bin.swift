@@ -96,13 +96,13 @@ private extension CaptureCLI {
                 opt(
                     "width",
                     as: Int.self,
-                    help: "Video width."
+                    help: "Video width. Defaults to selected display width. If used without --height, preserves display aspect ratio."
                 )
 
                 opt(
                     "height",
                     as: Int.self,
-                    help: "Video height."
+                    help: "Video height. Defaults to selected display height. If used without --width, preserves display aspect ratio."
                 )
 
                 opt(
@@ -144,6 +144,11 @@ private extension CaptureCLI {
                     help: "Audio input device name or identifier."
                 )
 
+                flag(
+                    "system-audio",
+                    help: "Capture system audio as a separate audio track."
+                )
+
                 opt(
                     "output",
                     short: "o",
@@ -162,13 +167,13 @@ private extension CaptureCLI {
                 opt(
                     "width",
                     as: Int.self,
-                    help: "Video width."
+                    help: "Video width. Defaults to selected display width. If used without --height, preserves display aspect ratio."
                 )
 
                 opt(
                     "height",
                     as: Int.self,
-                    help: "Video height."
+                    help: "Video height. Defaults to selected display height. If used without --width, preserves display aspect ratio."
                 )
 
                 opt(
@@ -390,12 +395,12 @@ private extension CaptureCLI {
         let width = try invocation.value(
             "width",
             as: Int.self
-        ) ?? 1920
+        )
 
         let height = try invocation.value(
             "height",
             as: Int.self
-        ) ?? 1080
+        )
 
         let fps = try invocation.value(
             "fps",
@@ -438,14 +443,15 @@ private extension CaptureCLI {
             durationSeconds: durationSeconds
         )
 
+        let provider = MacCaptureDeviceProvider()
         let result = try await ScreenCaptureVideoRecorder().recordVideo(
             configuration: configuration,
-            options: options
+            options: options,
+            deviceProvider: provider
         )
 
-        fputs(
-            "capture: wrote video \(result.output.path) frames=\(result.frameCount) quality=\(video.quality.rawValue) bitrate=\(video.bitrate)\n",
-            stderr
+        writeVideoSummary(
+            result: result
         )
     }
 
@@ -453,38 +459,20 @@ private extension CaptureCLI {
         limitSeconds: Int?,
         output: URL,
         audioName: String,
-        quality: CaptureVideoQuality,
-        bitrate: Int
+        systemAudioEnabled: Bool,
+        video: CaptureResolvedVideoOptions
     ) -> TerminalLiveStatusLine {
-        let modeLine: String
-
-        if let limitSeconds {
-            modeLine = "mode: fixed duration \(TerminalDurationFormatter.format(TimeInterval(limitSeconds)))"
-        } else {
-            modeLine = "mode: live"
-        }
-
-        let stopLine: String
-
-        if limitSeconds == nil {
-            stopLine = "stop: press q + Return, Ctrl-C, or send SIGTERM"
-        } else {
-            stopLine = "stop: waits for duration limit"
-        }
-
-        return TerminalLiveStatusLine(
+        TerminalLiveStatusLine(
             limitSeconds: limitSeconds.map(
                 TimeInterval.init
             ),
-            leadingLines: [
-                "capture: recording",
-                "output: \(output.path)",
-                "audio: \(audioName)",
-                "quality: \(quality.rawValue)",
-                "bitrate: \(bitrate)",
-                modeLine,
-                stopLine,
-            ]
+            leadingLines: recordingStartedLines(
+                output: output,
+                audioName: audioName,
+                systemAudioEnabled: systemAudioEnabled,
+                video: video,
+                limitSeconds: limitSeconds
+            )
         ) { frame in
             if let limitText = frame.limitText,
                let remainingText = frame.remainingText {
@@ -517,12 +505,12 @@ private extension CaptureCLI {
         let width = try invocation.value(
             "width",
             as: Int.self
-        ) ?? 1920
+        )
 
         let height = try invocation.value(
             "height",
             as: Int.self
-        ) ?? 1080
+        )
 
         let fps = try invocation.value(
             "fps",
@@ -542,6 +530,11 @@ private extension CaptureCLI {
             "audio",
             as: String.self
         ) ?? "ext-in"
+
+        let systemAudioEnabled = try invocation.flag(
+            "system-audio",
+            default: false
+        )
 
         let cursor = try invocation.flag(
             "cursor",
@@ -563,28 +556,40 @@ private extension CaptureCLI {
             )
         )
 
+        let systemAudio = try CaptureSystemAudioOptions(
+            enabled: systemAudioEnabled
+        )
+
         let configuration = try CaptureConfiguration(
             video: video,
             audio: audio,
+            systemAudio: systemAudio,
             container: try container(
                 for: output
             ),
             output: output
         )
 
+        let provider = MacCaptureDeviceProvider()
+        let resolvedVideo = try await resolvedVideoPreview(
+            configuration: configuration,
+            provider: provider
+        )
+
         if let durationSeconds {
-            let session = try CaptureSession(
+            let session = CaptureSession(
                 configuration: configuration,
-                options: CaptureRecordOptions(
+                options: try CaptureRecordOptions(
                     durationSeconds: durationSeconds
-                )
+                ),
+                deviceProvider: provider
             )
             let timer = recordingTimer(
                 limitSeconds: durationSeconds,
                 output: output,
                 audioName: audioName,
-                quality: video.quality,
-                bitrate: video.bitrate
+                systemAudioEnabled: systemAudioEnabled,
+                video: resolvedVideo
             )
 
             await timer.start()
@@ -596,9 +601,8 @@ private extension CaptureCLI {
                     finalLine: "time: \(TerminalDurationFormatter.format(TimeInterval(result.durationSeconds)))"
                 )
 
-                fputs(
-                    "capture: wrote recording \(result.output.path) duration=\(result.durationSeconds)s frames=\(result.videoFrameCount) quality=\(video.quality.rawValue) bitrate=\(video.bitrate)\n",
-                    stderr
+                writeRecordingSummary(
+                    result: result
                 )
             } catch {
                 await timer.stop()
@@ -610,14 +614,15 @@ private extension CaptureCLI {
                 stopSignal: stopSignal
             )
             let session = CaptureSession(
-                configuration: configuration
+                configuration: configuration,
+                deviceProvider: provider
             )
             let timer = recordingTimer(
                 limitSeconds: nil,
                 output: output,
                 audioName: audioName,
-                quality: video.quality,
-                bitrate: video.bitrate
+                systemAudioEnabled: systemAudioEnabled,
+                video: resolvedVideo
             )
 
             listener.start()
@@ -633,9 +638,8 @@ private extension CaptureCLI {
                 )
                 listener.stop()
 
-                fputs(
-                    "capture: wrote recording \(result.output.path) duration=\(result.durationSeconds)s frames=\(result.videoFrameCount) quality=\(video.quality.rawValue) bitrate=\(video.bitrate)\n",
-                    stderr
+                writeRecordingSummary(
+                    result: result
                 )
             } catch {
                 await timer.stop()
@@ -643,6 +647,27 @@ private extension CaptureCLI {
                 throw error
             }
         }
+    }
+
+    static func resolvedVideoPreview(
+        configuration: CaptureConfiguration,
+        provider: any CaptureDeviceProvider
+    ) async throws -> CaptureResolvedVideoOptions {
+        let resolved = try await CaptureDeviceResolver(
+            provider: provider
+        ).resolve(
+            configuration: configuration
+        )
+
+        guard let size = resolved.display.size else {
+            throw CaptureError.videoCapture(
+                "Could not resolve display size for \(resolved.display.name)."
+            )
+        }
+
+        return try configuration.video.resolved(
+            displaySize: size
+        )
     }
 
     static func videoQuality(

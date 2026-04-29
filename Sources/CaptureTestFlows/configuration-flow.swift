@@ -26,16 +26,32 @@ extension CaptureFlowSuite {
                     audio: audio,
                     output: output
                 )
+                let resolvedVideo = try configuration.video.resolved(
+                    displaySize: CaptureVideoSize(
+                        width: 5120,
+                        height: 2880
+                    )
+                )
 
                 try Expect.equal(
                     configuration.video.width,
-                    1920,
-                    "video.width"
+                    nil,
+                    "video.requested-width"
                 )
                 try Expect.equal(
                     configuration.video.height,
-                    1080,
-                    "video.height"
+                    nil,
+                    "video.requested-height"
+                )
+                try Expect.equal(
+                    resolvedVideo.width,
+                    5120,
+                    "video.resolved-width"
+                )
+                try Expect.equal(
+                    resolvedVideo.height,
+                    2880,
+                    "video.resolved-height"
                 )
                 try Expect.equal(
                     configuration.video.fps,
@@ -56,6 +72,100 @@ extension CaptureFlowSuite {
                     configuration.container,
                     .mov,
                     "container"
+                )
+            }
+
+            Step("explicit video size overrides display size") {
+                let video = try CaptureVideoOptions(
+                    width: 1920,
+                    height: 1080
+                )
+                let resolved = try video.resolved(
+                    displaySize: CaptureVideoSize(
+                        width: 5120,
+                        height: 2880
+                    )
+                )
+
+                try Expect.equal(
+                    resolved.width,
+                    1920,
+                    "video.resolved-width"
+                )
+                try Expect.equal(
+                    resolved.height,
+                    1080,
+                    "video.resolved-height"
+                )
+            }
+
+            Step("single width preserves display aspect ratio") {
+                let video = try CaptureVideoOptions(
+                    width: 2560
+                )
+                let resolved = try video.resolved(
+                    displaySize: CaptureVideoSize(
+                        width: 5120,
+                        height: 2880
+                    )
+                )
+
+                try Expect.equal(
+                    resolved.width,
+                    2560,
+                    "video.resolved-width"
+                )
+                try Expect.equal(
+                    resolved.height,
+                    1440,
+                    "video.resolved-height"
+                )
+            }
+
+            Step("single height preserves display aspect ratio") {
+                let video = try CaptureVideoOptions(
+                    height: 1440
+                )
+                let resolved = try video.resolved(
+                    displaySize: CaptureVideoSize(
+                        width: 5120,
+                        height: 2880
+                    )
+                )
+
+                try Expect.equal(
+                    resolved.width,
+                    2560,
+                    "video.resolved-width"
+                )
+                try Expect.equal(
+                    resolved.height,
+                    1440,
+                    "video.resolved-height"
+                )
+            }
+
+            Step("explicit video bitrate overrides quality") {
+                let video = try CaptureVideoOptions(
+                    quality: .archival,
+                    bitrate: 14_000_000
+                )
+                let resolved = try video.resolved(
+                    displaySize: CaptureVideoSize(
+                        width: 5120,
+                        height: 2880
+                    )
+                )
+
+                try Expect.equal(
+                    resolved.quality.rawValue,
+                    CaptureVideoQuality.archival.rawValue,
+                    "video.quality"
+                )
+                try Expect.equal(
+                    resolved.bitrate,
+                    14_000_000,
+                    "video.bitrate"
                 )
             }
 
@@ -112,6 +222,16 @@ extension CaptureFlowSuite {
                 ) {
                     _ = try CaptureVideoOptions(
                         fps: 0
+                    )
+                }
+            }
+
+            Step("invalid video bitrate throws") {
+                try Expect.throwsError(
+                    "video.invalid-bitrate"
+                ) {
+                    _ = try CaptureVideoOptions(
+                        bitrate: 0
                     )
                 }
             }
