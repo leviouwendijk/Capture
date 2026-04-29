@@ -1,0 +1,19 @@
+uuid = "DBE1FAFE-635A-42E2-A329-7B033AD1D594"
+name = "Capture"
+types {
+    "binary"
+}
+versions {
+    release {
+        major = 0
+        minor = 1
+        patch = 0
+    }
+}
+compile {
+    use = true
+    arguments { "--targets" "capturer" }
+}
+details = ""
+author = "leviouwendijk"
+update = "https://raw.githubusercontent.com/leviouwendijk/Capture/master/build-object.pkl"

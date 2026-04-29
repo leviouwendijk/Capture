@@ -14,8 +14,8 @@ let package = Package(
             targets: ["Capture"]
         ),
         .executable(
-            name: "capture",
-            targets: ["CaptureCLI"]
+            name: "capturer",
+            targets: ["capturer"]
         ),
         .executable(
             name: "ctest",
@@ -32,12 +32,13 @@ let package = Package(
             name: "Capture"
         ),
         .executableTarget(
-            name: "CaptureCLI",
+            name: "capturer",
             dependencies: [
                 "Capture",
                 .product(name: "Terminal", package: "Terminal"),
                 .product(name: "Arguments", package: "Arguments"),
-            ]
+            ],
+            path: "Sources/CaptureCLI"
         ),
         .executableTarget(
             name: "CaptureTestFlows",
