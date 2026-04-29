@@ -6,6 +6,7 @@ public struct CaptureVideoOptions: Sendable, Codable, Hashable {
     public let fps: Int
     public let cursor: Bool
     public let codec: CaptureVideoCodec
+    public let quality: CaptureVideoQuality
     public let bitrate: Int
 
     public init(
@@ -14,7 +15,8 @@ public struct CaptureVideoOptions: Sendable, Codable, Hashable {
         fps: Int = 24,
         cursor: Bool = true,
         codec: CaptureVideoCodec = .h264,
-        bitrate: Int = 3_500_000
+        quality: CaptureVideoQuality = .standard,
+        bitrate: Int? = nil
     ) throws {
         guard width > 0, height > 0 else {
             throw CaptureError.invalidVideoSize(
@@ -29,12 +31,25 @@ public struct CaptureVideoOptions: Sendable, Codable, Hashable {
             )
         }
 
+        let resolvedBitrate = bitrate ?? quality.recommendedBitrate(
+            width: width,
+            height: height,
+            fps: fps
+        )
+
+        guard resolvedBitrate > 0 else {
+            throw CaptureError.invalidVideoBitrate(
+                resolvedBitrate
+            )
+        }
+
         self.width = width
         self.height = height
         self.fps = fps
         self.cursor = cursor
         self.codec = codec
-        self.bitrate = bitrate
+        self.quality = quality
+        self.bitrate = resolvedBitrate
     }
 }
 

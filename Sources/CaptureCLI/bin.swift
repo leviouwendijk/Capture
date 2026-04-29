@@ -2,6 +2,7 @@ import Arguments
 import Capture
 import Foundation
 import Terminal
+import Darwin
 
 @main
 enum CaptureCLI {
@@ -110,6 +111,19 @@ private extension CaptureCLI {
                     help: "Video frame rate."
                 )
 
+                opt(
+                    "quality",
+                    short: "q",
+                    as: String.self,
+                    help: "Video quality preset: compact, standard, high, archival."
+                )
+
+                opt(
+                    "bitrate",
+                    as: Int.self,
+                    help: "Explicit video bitrate in bits per second. Overrides --quality."
+                )
+
                 flag(
                     "cursor",
                     help: "Show the cursor."
@@ -161,6 +175,18 @@ private extension CaptureCLI {
                     "fps",
                     as: Int.self,
                     help: "Video frame rate."
+                )
+
+                opt(
+                    "quality",
+                    as: String.self,
+                    help: "Video quality preset: compact, standard, high, archival."
+                )
+
+                opt(
+                    "bitrate",
+                    as: Int.self,
+                    help: "Explicit video bitrate in bits per second. Overrides --quality."
                 )
 
                 flag(
@@ -376,6 +402,15 @@ private extension CaptureCLI {
             as: Int.self
         ) ?? 24
 
+        let quality = try videoQuality(
+            invocation: invocation
+        )
+
+        let bitrate = try invocation.value(
+            "bitrate",
+            as: Int.self
+        )
+
         let cursor = try invocation.flag(
             "cursor",
             default: true
@@ -385,7 +420,9 @@ private extension CaptureCLI {
             width: width,
             height: height,
             fps: fps,
-            cursor: cursor
+            cursor: cursor,
+            quality: quality,
+            bitrate: bitrate
         )
 
         let configuration = try CaptureConfiguration(
@@ -407,9 +444,55 @@ private extension CaptureCLI {
         )
 
         fputs(
-            "capture: wrote video \(result.output.path) frames=\(result.frameCount)\n",
+            "capture: wrote video \(result.output.path) frames=\(result.frameCount) quality=\(video.quality.rawValue) bitrate=\(video.bitrate)\n",
             stderr
         )
+    }
+
+    static func recordingTimer(
+        limitSeconds: Int?,
+        output: URL,
+        audioName: String,
+        quality: CaptureVideoQuality,
+        bitrate: Int
+    ) -> TerminalLiveStatusLine {
+        let modeLine: String
+
+        if let limitSeconds {
+            modeLine = "mode: fixed duration \(TerminalDurationFormatter.format(TimeInterval(limitSeconds)))"
+        } else {
+            modeLine = "mode: live"
+        }
+
+        let stopLine: String
+
+        if limitSeconds == nil {
+            stopLine = "stop: press q + Return, Ctrl-C, or send SIGTERM"
+        } else {
+            stopLine = "stop: waits for duration limit"
+        }
+
+        return TerminalLiveStatusLine(
+            limitSeconds: limitSeconds.map(
+                TimeInterval.init
+            ),
+            leadingLines: [
+                "capture: recording",
+                "output: \(output.path)",
+                "audio: \(audioName)",
+                "quality: \(quality.rawValue)",
+                "bitrate: \(bitrate)",
+                modeLine,
+                stopLine,
+            ]
+        ) { frame in
+            if let limitText = frame.limitText,
+               let remainingText = frame.remainingText {
+                return "time: \(frame.elapsedText) / \(limitText)    remaining: \(remainingText)"
+            }
+
+            return "time: \(frame.elapsedText)"
+        }
     }
 
     static func record(
@@ -429,7 +512,7 @@ private extension CaptureCLI {
         let durationSeconds = try invocation.value(
             "duration",
             as: Int.self
-        ) ?? 5
+        )
 
         let width = try invocation.value(
             "width",
@@ -446,6 +529,15 @@ private extension CaptureCLI {
             as: Int.self
         ) ?? 24
 
+        let quality = try videoQuality(
+            invocation: invocation
+        )
+
+        let bitrate = try invocation.value(
+            "bitrate",
+            as: Int.self
+        )
+
         let audioName = try invocation.value(
             "audio",
             as: String.self
@@ -460,7 +552,9 @@ private extension CaptureCLI {
             width: width,
             height: height,
             fps: fps,
-            cursor: cursor
+            cursor: cursor,
+            quality: quality,
+            bitrate: bitrate
         )
 
         let audio = try CaptureAudioOptions(
@@ -478,21 +572,97 @@ private extension CaptureCLI {
             output: output
         )
 
-        let options = try CaptureRecordOptions(
-            durationSeconds: durationSeconds
-        )
+        if let durationSeconds {
+            let session = try CaptureSession(
+                configuration: configuration,
+                options: CaptureRecordOptions(
+                    durationSeconds: durationSeconds
+                )
+            )
+            let timer = recordingTimer(
+                limitSeconds: durationSeconds,
+                output: output,
+                audioName: audioName,
+                quality: video.quality,
+                bitrate: video.bitrate
+            )
 
-        let session = CaptureSession(
-            configuration: configuration,
-            options: options
-        )
+            await timer.start()
 
-        let result = try await session.start()
+            do {
+                let result = try await session.start()
 
-        fputs(
-            "capture: wrote recording \(result.output.path) frames=\(result.videoFrameCount)\n",
-            stderr
-        )
+                await timer.stop(
+                    finalLine: "time: \(TerminalDurationFormatter.format(TimeInterval(result.durationSeconds)))"
+                )
+
+                fputs(
+                    "capture: wrote recording \(result.output.path) duration=\(result.durationSeconds)s frames=\(result.videoFrameCount) quality=\(video.quality.rawValue) bitrate=\(video.bitrate)\n",
+                    stderr
+                )
+            } catch {
+                await timer.stop()
+                throw error
+            }
+        } else {
+            let stopSignal = CaptureStopSignal()
+            let listener = CaptureCLIStopListener(
+                stopSignal: stopSignal
+            )
+            let session = CaptureSession(
+                configuration: configuration
+            )
+            let timer = recordingTimer(
+                limitSeconds: nil,
+                output: output,
+                audioName: audioName,
+                quality: video.quality,
+                bitrate: video.bitrate
+            )
+
+            listener.start()
+            await timer.start()
+
+            do {
+                let result = try await session.startUntilStopped(
+                    stopSignal: stopSignal
+                )
+
+                await timer.stop(
+                    finalLine: "time: \(TerminalDurationFormatter.format(TimeInterval(result.durationSeconds)))"
+                )
+                listener.stop()
+
+                fputs(
+                    "capture: wrote recording \(result.output.path) duration=\(result.durationSeconds)s frames=\(result.videoFrameCount) quality=\(video.quality.rawValue) bitrate=\(video.bitrate)\n",
+                    stderr
+                )
+            } catch {
+                await timer.stop()
+                listener.stop()
+                throw error
+            }
+        }
+    }
+
+    static func videoQuality(
+        invocation: ParsedInvocation
+    ) throws -> CaptureVideoQuality {
+        let value = try invocation.value(
+            "quality",
+            as: String.self
+        ) ?? CaptureVideoQuality.standard.rawValue
+
+        guard let quality = CaptureVideoQuality(
+            rawValue: value.lowercased()
+        ) else {
+            throw CaptureCLIError.invalidQuality(
+                value: value,
+                allowed: CaptureVideoQuality.allCases.map(\.rawValue)
+            )
+        }
+
+        return quality
     }
 
     static func container(
@@ -510,5 +680,85 @@ private extension CaptureCLI {
                 "Video output must end in .mov or .mp4."
             )
         }
+    }
+}
+
+private final class CaptureCLIStopListener: @unchecked Sendable {
+    private let stopSignal: CaptureStopSignal
+    private let queue = DispatchQueue(
+        label: "capture.cli.stop-listener"
+    )
+
+    private var interruptSource: DispatchSourceSignal?
+    private var terminateSource: DispatchSourceSignal?
+    private var inputTask: Task<Void, Never>?
+
+    init(
+        stopSignal: CaptureStopSignal
+    ) {
+        self.stopSignal = stopSignal
+    }
+
+    func start() {
+        Darwin.signal(
+            SIGINT,
+            SIG_IGN
+        )
+        Darwin.signal(
+            SIGTERM,
+            SIG_IGN
+        )
+
+        let interruptSource = DispatchSource.makeSignalSource(
+            signal: SIGINT,
+            queue: queue
+        )
+        let terminateSource = DispatchSource.makeSignalSource(
+            signal: SIGTERM,
+            queue: queue
+        )
+
+        interruptSource.setEventHandler { [stopSignal] in
+            stopSignal.stop()
+        }
+        terminateSource.setEventHandler { [stopSignal] in
+            stopSignal.stop()
+        }
+
+        interruptSource.resume()
+        terminateSource.resume()
+
+        self.interruptSource = interruptSource
+        self.terminateSource = terminateSource
+
+        inputTask = Task.detached { [stopSignal] in
+            while let line = readLine() {
+                let value = line.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                ).lowercased()
+
+                guard value == "q" else {
+                    continue
+                }
+
+                stopSignal.stop()
+                break
+            }
+        }
+    }
+
+    func stop() {
+        interruptSource?.cancel()
+        terminateSource?.cancel()
+        inputTask?.cancel()
+
+        Darwin.signal(
+            SIGINT,
+            SIG_DFL
+        )
+        Darwin.signal(
+            SIGTERM,
+            SIG_DFL
+        )
     }
 }

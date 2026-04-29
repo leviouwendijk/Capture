@@ -3,6 +3,7 @@ import Foundation
 public enum CaptureError: Error, Sendable, LocalizedError, Equatable {
     case invalidVideoSize(width: Int, height: Int)
     case invalidFrameRate(Int)
+    case invalidVideoBitrate(Int)
     case invalidSampleRate(Int)
     case invalidChannel(Int)
     case invalidDurationSeconds(Int)
@@ -23,6 +24,9 @@ public enum CaptureError: Error, Sendable, LocalizedError, Equatable {
 
         case .invalidFrameRate(let fps):
             return "Invalid frame rate: \(fps)."
+
+        case .invalidVideoBitrate(let bitrate):
+            return "Invalid video bitrate: \(bitrate)."
 
         case .invalidSampleRate(let sampleRate):
             return "Invalid sample rate: \(sampleRate)."

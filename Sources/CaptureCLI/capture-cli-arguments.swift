@@ -2,11 +2,15 @@ import Foundation
 
 enum CaptureCLIError: Error, LocalizedError {
     case missing(String)
+    case invalidQuality(value: String, allowed: [String])
 
     var errorDescription: String? {
         switch self {
         case .missing(let message):
             return message
+
+        case .invalidQuality(let value, let allowed):
+            return "Invalid quality preset: \(value). Expected one of: \(allowed.joined(separator: ", "))."
         }
     }
 }

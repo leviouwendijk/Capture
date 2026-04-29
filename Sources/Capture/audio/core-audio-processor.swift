@@ -60,6 +60,54 @@ public struct CoreAudioRecorder: Sendable {
             durationSeconds: options.durationSeconds
         )
     }
+
+    public func recordAudioUntilStopped(
+        configuration: CaptureConfiguration,
+        stopSignal: CaptureStopSignal,
+        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider()
+    ) async throws -> CaptureAudioRecordingResult {
+        try validateOutput(
+            configuration.output
+        )
+
+        let resolved = try await CaptureDeviceResolver(
+            provider: deviceProvider
+        ).resolve(
+            configuration: configuration
+        )
+
+        let recorder = AudioQueueRecorder(
+            device: resolved.audioInput,
+            audio: configuration.audio,
+            output: configuration.output
+        )
+
+        let startedAt = Date()
+
+        do {
+            try recorder.start()
+
+            await stopSignal.wait()
+
+            try recorder.stop()
+        } catch {
+            try? recorder.stop()
+            throw error
+        }
+
+        return CaptureAudioRecordingResult(
+            output: configuration.output,
+            device: resolved.audioInput,
+            durationSeconds: max(
+                0,
+                Int(
+                    Date().timeIntervalSince(
+                        startedAt
+                    ).rounded()
+                )
+            )
+        )
+    }
 }
 
 private extension CoreAudioRecorder {

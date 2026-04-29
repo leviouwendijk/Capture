@@ -34,6 +34,25 @@ public final class CaptureSession: Sendable {
 
     @discardableResult
     public func start() async throws -> CaptureRecordingResult {
+        let stopSignal = CaptureStopSignal()
+
+        Task {
+            try? await Task.sleep(
+                nanoseconds: UInt64(options.durationSeconds) * 1_000_000_000
+            )
+
+            stopSignal.stop()
+        }
+
+        return try await startUntilStopped(
+            stopSignal: stopSignal
+        )
+    }
+
+    @discardableResult
+    public func startUntilStopped(
+        stopSignal: CaptureStopSignal
+    ) async throws -> CaptureRecordingResult {
         let workingDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(
                 "capture-\(UUID().uuidString)",
@@ -74,27 +93,20 @@ public final class CaptureSession: Sendable {
             output: audioOutput
         )
 
-        let videoOptions = try CaptureVideoRecordOptions(
-            durationSeconds: options.durationSeconds
-        )
-        let audioOptions = try CaptureAudioRecordOptions(
-            durationSeconds: options.durationSeconds
-        )
-
-        async let videoResult = ScreenCaptureVideoRecorder().recordVideo(
+        async let videoResult = ScreenCaptureVideoRecorder().recordVideoUntilStopped(
             configuration: videoConfiguration,
-            options: videoOptions,
+            stopSignal: stopSignal,
             deviceProvider: deviceProvider
         )
 
-        async let audioResult = CoreAudioRecorder().recordAudio(
+        async let audioResult = CoreAudioRecorder().recordAudioUntilStopped(
             configuration: audioConfiguration,
-            options: audioOptions,
+            stopSignal: stopSignal,
             deviceProvider: deviceProvider
         )
 
         let capturedVideoResult = try await videoResult
-        _ = try await audioResult
+        let capturedAudioResult = try await audioResult
 
         try await CaptureAssetMuxer().mux(
             video: videoOutput,
@@ -105,14 +117,17 @@ public final class CaptureSession: Sendable {
 
         return CaptureRecordingResult(
             output: configuration.output,
-            durationSeconds: options.durationSeconds,
+            durationSeconds: max(
+                capturedVideoResult.durationSeconds,
+                capturedAudioResult.durationSeconds
+            ),
             videoFrameCount: capturedVideoResult.frameCount
         )
     }
 
     public func stop() async throws {
         throw CaptureError.recordingNotImplemented(
-            "CaptureSession.stop() is not implemented for fixed-duration recordings yet."
+            "CaptureSession.stop() is not implemented for externally owned sessions yet."
         )
     }
 }

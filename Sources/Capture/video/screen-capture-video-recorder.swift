@@ -117,6 +117,105 @@ public struct ScreenCaptureVideoRecorder: Sendable {
             throw error
         }
     }
+
+    public func recordVideoUntilStopped(
+        configuration: CaptureConfiguration,
+        stopSignal: CaptureStopSignal,
+        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider()
+    ) async throws -> CaptureVideoRecordingResult {
+        try validateOutput(
+            configuration.output
+        )
+
+        try ensureScreenRecordingPermission()
+
+        let resolved = try await CaptureDeviceResolver(
+            provider: deviceProvider
+        ).resolve(
+            configuration: configuration
+        )
+
+        let content = try await SCShareableContent.excludingDesktopWindows(
+            false,
+            onScreenWindowsOnly: true
+        )
+
+        guard let display = content.displays.first(
+            where: {
+                String(
+                    $0.displayID
+                ) == resolved.display.id
+            }
+        ) else {
+            throw CaptureError.deviceNotFound(
+                kind: .display,
+                value: resolved.display.id
+            )
+        }
+
+        let filter = SCContentFilter(
+            display: display,
+            excludingWindows: []
+        )
+
+        let streamConfiguration = makeStreamConfiguration(
+            video: configuration.video
+        )
+
+        let writer = try ScreenCaptureVideoWriter(
+            output: configuration.output,
+            container: configuration.container,
+            video: configuration.video
+        )
+
+        let streamOutput = ScreenCaptureVideoStreamOutput(
+            writer: writer
+        )
+
+        let stream = SCStream(
+            filter: filter,
+            configuration: streamConfiguration,
+            delegate: streamOutput
+        )
+
+        try stream.addStreamOutput(
+            streamOutput,
+            type: .screen,
+            sampleHandlerQueue: streamOutput.queue
+        )
+
+        let startedAt = Date()
+
+        do {
+            try await stream.startCapture()
+
+            await stopSignal.wait()
+
+            try await stream.stopCapture()
+
+            let frameCount = try await writer.finish(
+                diagnostics: streamOutput.diagnostics()
+            )
+
+            return CaptureVideoRecordingResult(
+                output: configuration.output,
+                display: resolved.display,
+                durationSeconds: max(
+                    0,
+                    Int(
+                        Date().timeIntervalSince(
+                            startedAt
+                        ).rounded()
+                    )
+                ),
+                frameCount: frameCount
+            )
+        } catch {
+            try? await stream.stopCapture()
+            writer.cancel()
+            throw error
+        }
+    }
 }
 
 private extension ScreenCaptureVideoRecorder {
