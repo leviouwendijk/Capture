@@ -82,6 +82,17 @@ capturer record \
     --output /tmp/balanced-audio.mov
 ```
 
+Also raise the mic audio:
+
+```sh
+capturer record \
+    --audio ext-in \
+    --system-audio \
+    --system-gain 0.35 \
+    --mic-gain 1.5 \
+    --output /tmp/balanced-audio.mov
+```
+
 > Any `--mic-gain` or `--system-gain` value other than `1.0` forces the rendered mixed-audio path.
 
 Use a named input device:
