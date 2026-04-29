@@ -2,13 +2,13 @@
 
 ## Features
 
-* built-in muxing support
+* built-in muxing support (with offset)
 * set resolution (default: same as screen)
 * set (target) fps
 * set audio input
 * flag for system-audio
-* simple gain setting (`--system-gain 0.35` can balance lower mic volume)
-* see your input devices
+* simple gain setting (`--system-gain 0.35` can balance a lower mic input volume)
+* see your available input devices
 
 ## Examples
 
