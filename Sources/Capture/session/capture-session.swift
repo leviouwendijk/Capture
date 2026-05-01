@@ -61,164 +61,171 @@ public final class CaptureSession: Sendable {
             }
         }
 
-        let videoOutput = workingDirectory.appendingPathComponent(
-            "video.mov"
-        )
-        let audioOutput = workingDirectory.appendingPathComponent(
-            "audio.wav"
-        )
-        let systemAudioOutput = workingDirectory.appendingPathComponent(
-            "system-audio.m4a"
-        )
+        do {
+            let videoOutput = workingDirectory.appendingPathComponent(
+                "video.mov"
+            )
+            let audioOutput = workingDirectory.appendingPathComponent(
+                "audio.wav"
+            )
+            let systemAudioOutput = workingDirectory.appendingPathComponent(
+                "system-audio.m4a"
+            )
 
-        let videoConfiguration = try CaptureConfiguration(
-            display: configuration.display,
-            video: configuration.video,
-            audio: configuration.audio,
-            systemAudio: configuration.systemAudio,
-            audioMix: configuration.audioMix,
-            container: .mov,
-            output: videoOutput
-        )
+            let videoConfiguration = try CaptureConfiguration(
+                display: configuration.display,
+                video: configuration.video,
+                audio: configuration.audio,
+                systemAudio: configuration.systemAudio,
+                audioMix: configuration.audioMix,
+                container: .mov,
+                output: videoOutput
+            )
 
-        let audioConfiguration = try CaptureConfiguration(
-            display: configuration.display,
-            video: configuration.video,
-            audio: configuration.audio,
-            systemAudio: configuration.systemAudio,
-            audioMix: configuration.audioMix,
-            container: .mov,
-            output: audioOutput
-        )
+            let audioConfiguration = try CaptureConfiguration(
+                display: configuration.display,
+                video: configuration.video,
+                audio: configuration.audio,
+                systemAudio: configuration.systemAudio,
+                audioMix: configuration.audioMix,
+                container: .mov,
+                output: audioOutput
+            )
 
-        let systemAudioConfiguration = try CaptureConfiguration(
-            display: configuration.display,
-            video: configuration.video,
-            audio: configuration.audio,
-            systemAudio: configuration.systemAudio,
-            audioMix: configuration.audioMix,
-            container: .mov,
-            output: systemAudioOutput
-        )
+            let systemAudioConfiguration = try CaptureConfiguration(
+                display: configuration.display,
+                video: configuration.video,
+                audio: configuration.audio,
+                systemAudio: configuration.systemAudio,
+                audioMix: configuration.audioMix,
+                container: .mov,
+                output: systemAudioOutput
+            )
 
-        async let videoResult = ScreenCaptureVideoRecorder().recordVideoUntilStopped(
-            configuration: videoConfiguration,
-            stopSignal: stopSignal,
-            deviceProvider: deviceProvider
-        )
+            async let videoResult = ScreenCaptureVideoRecorder().recordVideoUntilStopped(
+                configuration: videoConfiguration,
+                stopSignal: stopSignal,
+                deviceProvider: deviceProvider
+            )
 
-        async let audioResult = CoreAudioRecorder().recordAudioUntilStopped(
-            configuration: audioConfiguration,
-            stopSignal: stopSignal,
-            deviceProvider: deviceProvider
-        )
+            async let audioResult = CoreAudioRecorder().recordAudioUntilStopped(
+                configuration: audioConfiguration,
+                stopSignal: stopSignal,
+                deviceProvider: deviceProvider
+            )
 
-        async let systemAudioResult = recordSystemAudioIfNeeded(
-            configuration: systemAudioConfiguration,
-            stopSignal: stopSignal
-        )
+            async let systemAudioResult = recordSystemAudioIfNeeded(
+                configuration: systemAudioConfiguration,
+                stopSignal: stopSignal
+            )
 
-        let capturedVideoResult = try await videoResult
-        let capturedAudioResult = try await audioResult
-        let capturedSystemAudioResult = try await systemAudioResult
+            let capturedVideoResult = try await videoResult
+            let capturedAudioResult = try await audioResult
+            let capturedSystemAudioResult = try await systemAudioResult
 
-        let capturedDurationSeconds = [
-            capturedVideoResult.durationSeconds,
-            capturedAudioResult.durationSeconds,
-            capturedSystemAudioResult?.durationSeconds ?? 0,
-        ].max() ?? 0
+            let capturedDurationSeconds = [
+                capturedVideoResult.durationSeconds,
+                capturedAudioResult.durationSeconds,
+                capturedSystemAudioResult?.durationSeconds ?? 0,
+            ].max() ?? 0
 
-        await report(
-            .recordingStopped(
-                durationSeconds: TimeInterval(
-                    capturedDurationSeconds
+            await report(
+                .recordingStopped(
+                    durationSeconds: TimeInterval(
+                        capturedDurationSeconds
+                    )
                 )
             )
-        )
 
-        let videoTimelineStartHostTimeSeconds = capturedVideoResult.firstPresentationTimeSeconds
-            ?? capturedVideoResult.startedHostTimeSeconds
+            let videoTimelineStartHostTimeSeconds = capturedVideoResult.firstPresentationTimeSeconds
+                ?? capturedVideoResult.startedHostTimeSeconds
 
-        let microphoneStartHostTimeSeconds = capturedAudioResult.firstSampleHostTimeSeconds
-            ?? capturedAudioResult.startedHostTimeSeconds
+            let microphoneStartHostTimeSeconds = capturedAudioResult.firstSampleHostTimeSeconds
+                ?? capturedAudioResult.startedHostTimeSeconds
 
-        let microphoneStartOffsetSeconds = normalizedTimelineOffset(
-            microphoneStartHostTimeSeconds - videoTimelineStartHostTimeSeconds
-        )
-
-        let systemAudioStartOffsetSeconds = capturedSystemAudioResult.map { result in
-            let systemAudioStartHostTimeSeconds = result.firstPresentationTimeSeconds
-                ?? result.startedHostTimeSeconds
-
-            return normalizedTimelineOffset(
-                systemAudioStartHostTimeSeconds - videoTimelineStartHostTimeSeconds
+            let microphoneStartOffsetSeconds = normalizedTimelineOffset(
+                microphoneStartHostTimeSeconds - videoTimelineStartHostTimeSeconds
             )
-        }
 
-        var audioInputs = [
-            CaptureMuxAudioInput(
-                url: audioOutput,
-                role: .microphone,
-                gain: configuration.audioMix.microphoneGain,
-                startOffsetSeconds: microphoneStartOffsetSeconds
-            ),
-        ]
+            let systemAudioStartOffsetSeconds = capturedSystemAudioResult.map { result in
+                let systemAudioStartHostTimeSeconds = result.firstPresentationTimeSeconds
+                    ?? result.startedHostTimeSeconds
 
-        if capturedSystemAudioResult != nil {
-            audioInputs.append(
+                return normalizedTimelineOffset(
+                    systemAudioStartHostTimeSeconds - videoTimelineStartHostTimeSeconds
+                )
+            }
+
+            var audioInputs = [
                 CaptureMuxAudioInput(
-                    url: systemAudioOutput,
-                    role: .system,
-                    gain: configuration.audioMix.systemGain,
-                    startOffsetSeconds: systemAudioStartOffsetSeconds ?? 0
+                    url: audioOutput,
+                    role: .microphone,
+                    gain: configuration.audioMix.microphoneGain,
+                    startOffsetSeconds: microphoneStartOffsetSeconds
+                ),
+            ]
+
+            if capturedSystemAudioResult != nil {
+                audioInputs.append(
+                    CaptureMuxAudioInput(
+                        url: systemAudioOutput,
+                        role: .system,
+                        gain: configuration.audioMix.systemGain,
+                        startOffsetSeconds: systemAudioStartOffsetSeconds ?? 0
+                    )
+                )
+            }
+
+            let exportMode: CaptureExportMode = configuration.audioMix.requiresAudioRendering
+                ? .rendering
+                : .passthrough
+
+            await report(
+                .exportStarted(
+                    mode: exportMode
                 )
             )
+
+            try await CaptureAssetMuxer().mux(
+                video: videoOutput,
+                audio: audioInputs,
+                audioMix: configuration.audioMix,
+                output: configuration.output,
+                container: configuration.container
+            )
+
+            await report(
+                .exportFinished(
+                    mode: exportMode
+                )
+            )
+
+            shouldRemoveWorkingDirectory = true
+
+            return CaptureRecordingResult(
+                output: configuration.output,
+                durationSeconds: capturedDurationSeconds,
+                videoFrameCount: capturedVideoResult.frameCount,
+                video: capturedVideoResult.video,
+                videoDiagnostics: capturedVideoResult.diagnostics,
+                audioTrackCount: configuration.audioMix.requiresAudioRendering
+                    ? 1
+                    : audioInputs.count,
+                audioLayout: configuration.audioMix.requiresAudioRendering
+                    ? .mixed
+                    : configuration.audioMix.layout,
+                microphoneGain: configuration.audioMix.microphoneGain,
+                systemGain: configuration.audioMix.systemGain,
+                microphoneStartOffsetSeconds: microphoneStartOffsetSeconds,
+                systemAudioStartOffsetSeconds: systemAudioStartOffsetSeconds,
+                systemAudioSampleBufferCount: capturedSystemAudioResult?.sampleBufferCount
+            )
+        } catch {
+            throw CapturePartialRecordingError(
+                workingDirectory: workingDirectory,
+                underlyingError: error
+            )
         }
-
-        let exportMode: CaptureExportMode = configuration.audioMix.requiresAudioRendering
-            ? .rendering
-            : .passthrough
-
-        await report(
-            .exportStarted(
-                mode: exportMode
-            )
-        )
-
-        try await CaptureAssetMuxer().mux(
-            video: videoOutput,
-            audio: audioInputs,
-            audioMix: configuration.audioMix,
-            output: configuration.output,
-            container: configuration.container
-        )
-
-        await report(
-            .exportFinished(
-                mode: exportMode
-            )
-        )
-
-        shouldRemoveWorkingDirectory = true
-
-        return CaptureRecordingResult(
-            output: configuration.output,
-            durationSeconds: capturedDurationSeconds,
-            videoFrameCount: capturedVideoResult.frameCount,
-            video: capturedVideoResult.video,
-            videoDiagnostics: capturedVideoResult.diagnostics,
-            audioTrackCount: configuration.audioMix.requiresAudioRendering
-                ? 1
-                : audioInputs.count,
-            audioLayout: configuration.audioMix.requiresAudioRendering
-                ? .mixed
-                : configuration.audioMix.layout,
-            microphoneGain: configuration.audioMix.microphoneGain,
-            systemGain: configuration.audioMix.systemGain,
-            microphoneStartOffsetSeconds: microphoneStartOffsetSeconds,
-            systemAudioStartOffsetSeconds: systemAudioStartOffsetSeconds,
-            systemAudioSampleBufferCount: capturedSystemAudioResult?.sampleBufferCount
-        )
     }
 
     public func stop() async throws {

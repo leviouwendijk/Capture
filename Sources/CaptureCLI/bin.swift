@@ -14,16 +14,15 @@ enum CaptureCLI {
                 )
             )
         } catch {
-            fputs(
-                "capture: \(error.localizedDescription)\n",
-                stderr
+            writeError(
+                error
             )
             Foundation.exit(1)
         }
     }
 }
 
-private extension CaptureCLI {
+internal extension CaptureCLI {
     static func spec() throws -> CommandSpec {
         try cmd("capturer") {
             about("Native macOS screen and audio capture.")
@@ -1668,6 +1667,83 @@ private extension CaptureCLI {
                 "Video output must end in .mov or .mp4."
             )
         }
+    }
+}
+
+internal extension CaptureCLI {
+    static func writeError(
+        _ error: Error
+    ) {
+        guard let partialError = error as? CapturePartialRecordingError else {
+            fputs(
+                "capture: \(error.localizedDescription)\n",
+                stderr
+            )
+            return
+        }
+
+        fputs(
+            partialRecordingErrorMessage(
+                partialError
+            ),
+            stderr
+        )
+    }
+
+    static func partialRecordingErrorMessage(
+        _ error: CapturePartialRecordingError
+    ) -> String {
+        var lines = [
+            "capture: \(error.localizedDescription)",
+            "cause: \(error.underlyingErrorDescription)",
+            "working directory: \(error.workingDirectory.path)",
+        ]
+
+        if error.retainedFiles.isEmpty {
+            lines.append(
+                "files: none"
+            )
+        } else {
+            lines.append(
+                "files:"
+            )
+
+            for file in error.retainedFiles {
+                let path = relativePath(
+                    file,
+                    inside: error.workingDirectory
+                )
+
+                lines.append(
+                    "  - \(path)"
+                )
+            }
+        }
+
+        return lines.joined(
+            separator: "\n"
+        ) + "\n"
+    }
+
+    static func relativePath(
+        _ url: URL,
+        inside directory: URL
+    ) -> String {
+        let directoryPath = directory.standardizedFileURL.path
+        let filePath = url.standardizedFileURL.path
+        let prefix = directoryPath + "/"
+
+        guard filePath.hasPrefix(
+            prefix
+        ) else {
+            return filePath
+        }
+
+        return String(
+            filePath.dropFirst(
+                prefix.count
+            )
+        )
     }
 }
 

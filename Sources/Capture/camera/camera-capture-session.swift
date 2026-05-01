@@ -60,112 +60,119 @@ public final class CameraCaptureSession: Sendable {
             }
         }
 
-        let videoOutput = workingDirectory.appendingPathComponent(
-            "camera-video.mov"
-        )
-        let audioOutput = workingDirectory.appendingPathComponent(
-            "audio.wav"
-        )
+        do {
+            let videoOutput = workingDirectory.appendingPathComponent(
+                "camera-video.mov"
+            )
+            let audioOutput = workingDirectory.appendingPathComponent(
+                "audio.wav"
+            )
 
-        let videoConfiguration = try CaptureCameraConfiguration(
-            camera: configuration.camera,
-            video: configuration.video,
-            audio: configuration.audio,
-            audioMix: configuration.audioMix,
-            container: .mov,
-            output: videoOutput
-        )
+            let videoConfiguration = try CaptureCameraConfiguration(
+                camera: configuration.camera,
+                video: configuration.video,
+                audio: configuration.audio,
+                audioMix: configuration.audioMix,
+                container: .mov,
+                output: videoOutput
+            )
 
-        let audioConfiguration = try CaptureConfiguration(
-            video: configuration.video,
-            audio: configuration.audio,
-            output: audioOutput
-        )
+            let audioConfiguration = try CaptureConfiguration(
+                video: configuration.video,
+                audio: configuration.audio,
+                output: audioOutput
+            )
 
-        async let videoResult = CameraVideoRecorder().recordVideoUntilStopped(
-            configuration: videoConfiguration,
-            stopSignal: stopSignal,
-            deviceProvider: deviceProvider
-        )
+            async let videoResult = CameraVideoRecorder().recordVideoUntilStopped(
+                configuration: videoConfiguration,
+                stopSignal: stopSignal,
+                deviceProvider: deviceProvider
+            )
 
-        async let audioResult = CoreAudioRecorder().recordAudioUntilStopped(
-            configuration: audioConfiguration,
-            stopSignal: stopSignal,
-            deviceProvider: deviceProvider
-        )
+            async let audioResult = CoreAudioRecorder().recordAudioUntilStopped(
+                configuration: audioConfiguration,
+                stopSignal: stopSignal,
+                deviceProvider: deviceProvider
+            )
 
-        let capturedVideoResult = try await videoResult
-        let capturedAudioResult = try await audioResult
+            let capturedVideoResult = try await videoResult
+            let capturedAudioResult = try await audioResult
 
-        let capturedDurationSeconds = max(
-            capturedVideoResult.durationSeconds,
-            capturedAudioResult.durationSeconds
-        )
+            let capturedDurationSeconds = max(
+                capturedVideoResult.durationSeconds,
+                capturedAudioResult.durationSeconds
+            )
 
-        await report(
-            .recordingStopped(
-                durationSeconds: TimeInterval(
-                    capturedDurationSeconds
+            await report(
+                .recordingStopped(
+                    durationSeconds: TimeInterval(
+                        capturedDurationSeconds
+                    )
                 )
             )
-        )
 
-        let videoTimelineStartHostTimeSeconds = capturedVideoResult.firstPresentationTimeSeconds
-            ?? capturedVideoResult.startedHostTimeSeconds
+            let videoTimelineStartHostTimeSeconds = capturedVideoResult.firstPresentationTimeSeconds
+                ?? capturedVideoResult.startedHostTimeSeconds
 
-        let microphoneStartHostTimeSeconds = capturedAudioResult.firstSampleHostTimeSeconds
-            ?? capturedAudioResult.startedHostTimeSeconds
+            let microphoneStartHostTimeSeconds = capturedAudioResult.firstSampleHostTimeSeconds
+                ?? capturedAudioResult.startedHostTimeSeconds
 
-        let microphoneStartOffsetSeconds = normalizedTimelineOffset(
-            microphoneStartHostTimeSeconds - videoTimelineStartHostTimeSeconds
-        )
-
-        let audioInputs = [
-            CaptureMuxAudioInput(
-                url: audioOutput,
-                role: .microphone,
-                gain: configuration.audioMix.microphoneGain,
-                startOffsetSeconds: microphoneStartOffsetSeconds
-            ),
-        ]
-
-        let exportMode: CaptureExportMode = configuration.audioMix.requiresAudioRendering
-            ? .rendering
-            : .passthrough
-
-        await report(
-            .exportStarted(
-                mode: exportMode
+            let microphoneStartOffsetSeconds = normalizedTimelineOffset(
+                microphoneStartHostTimeSeconds - videoTimelineStartHostTimeSeconds
             )
-        )
 
-        try await CaptureAssetMuxer().mux(
-            video: videoOutput,
-            audio: audioInputs,
-            audioMix: configuration.audioMix,
-            output: configuration.output,
-            container: configuration.container
-        )
+            let audioInputs = [
+                CaptureMuxAudioInput(
+                    url: audioOutput,
+                    role: .microphone,
+                    gain: configuration.audioMix.microphoneGain,
+                    startOffsetSeconds: microphoneStartOffsetSeconds
+                ),
+            ]
 
-        await report(
-            .exportFinished(
-                mode: exportMode
+            let exportMode: CaptureExportMode = configuration.audioMix.requiresAudioRendering
+                ? .rendering
+                : .passthrough
+
+            await report(
+                .exportStarted(
+                    mode: exportMode
+                )
             )
-        )
 
-        shouldRemoveWorkingDirectory = true
+            try await CaptureAssetMuxer().mux(
+                video: videoOutput,
+                audio: audioInputs,
+                audioMix: configuration.audioMix,
+                output: configuration.output,
+                container: configuration.container
+            )
 
-        return CaptureCameraRecordingResult(
-            output: configuration.output,
-            durationSeconds: capturedDurationSeconds,
-            videoFrameCount: capturedVideoResult.frameCount,
-            video: capturedVideoResult.video,
-            camera: capturedVideoResult.camera,
-            audioInput: capturedAudioResult.device,
-            audioTrackCount: configuration.audioMix.requiresAudioRendering ? 1 : 1,
-            microphoneGain: configuration.audioMix.microphoneGain,
-            microphoneStartOffsetSeconds: microphoneStartOffsetSeconds
-        )
+            await report(
+                .exportFinished(
+                    mode: exportMode
+                )
+            )
+
+            shouldRemoveWorkingDirectory = true
+
+            return CaptureCameraRecordingResult(
+                output: configuration.output,
+                durationSeconds: capturedDurationSeconds,
+                videoFrameCount: capturedVideoResult.frameCount,
+                video: capturedVideoResult.video,
+                camera: capturedVideoResult.camera,
+                audioInput: capturedAudioResult.device,
+                audioTrackCount: configuration.audioMix.requiresAudioRendering ? 1 : 1,
+                microphoneGain: configuration.audioMix.microphoneGain,
+                microphoneStartOffsetSeconds: microphoneStartOffsetSeconds
+            )
+        } catch {
+            throw CapturePartialRecordingError(
+                workingDirectory: workingDirectory,
+                underlyingError: error
+            )
+        }
     }
 }
 
