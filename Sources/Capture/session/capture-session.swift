@@ -83,6 +83,12 @@ public final class CaptureSession: Sendable {
                 output: systemAudioOutput
             )
 
+            await report(
+                .recordingStarted(
+                    startedAt: Date()
+                )
+            )
+
             async let videoResult = ScreenCaptureVideoRecorder().recordVideoUntilStopped(
                 configuration: videoConfiguration,
                 stopSignal: stopSignal,
@@ -109,6 +115,18 @@ public final class CaptureSession: Sendable {
                 capturedAudioResult.durationSeconds,
                 capturedSystemAudioResult?.durationSeconds ?? 0,
             ].max() ?? 0
+
+            await report(
+                .recordingHealth(
+                    snapshot: CaptureRecordingHealthSnapshot(
+                        videoFrameCount: capturedVideoResult.frameCount,
+                        videoMissedFrameBudget: capturedVideoResult.diagnostics.missedFrameBudget,
+                        videoAppendSkipCount: capturedVideoResult.diagnostics.appendSkipCount,
+                        systemAudioEnabled: configuration.systemAudio.enabled,
+                        systemAudioSampleBufferCount: capturedSystemAudioResult?.sampleBufferCount
+                    )
+                )
+            )
 
             await report(
                 .recordingStopped(

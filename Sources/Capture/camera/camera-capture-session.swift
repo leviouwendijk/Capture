@@ -64,6 +64,12 @@ public final class CameraCaptureSession: Sendable {
                 output: audioOutput
             )
 
+            await report(
+                .recordingStarted(
+                    startedAt: Date()
+                )
+            )
+
             async let videoResult = CameraVideoRecorder().recordVideoUntilStopped(
                 configuration: videoConfiguration,
                 stopSignal: stopSignal,
@@ -82,6 +88,15 @@ public final class CameraCaptureSession: Sendable {
             let capturedDurationSeconds = max(
                 capturedVideoResult.durationSeconds,
                 capturedAudioResult.durationSeconds
+            )
+
+            await report(
+                .recordingHealth(
+                    snapshot: CaptureRecordingHealthSnapshot(
+                        cameraVideoFrameCount: capturedVideoResult.frameCount,
+                        videoFrameCount: capturedVideoResult.frameCount
+                    )
+                )
             )
 
             await report(

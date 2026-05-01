@@ -32,6 +32,15 @@ internal extension CaptureCLI {
                 about("List available capture devices.")
             }
 
+            try cmd("test") {
+                about("Run live Capture diagnostic commands.")
+
+                try cmd("fail") {
+                    about("Trigger a simulated recording failure notification.")
+                    discussion("Exercises the same notification and error-reporting path used by partial recording failures.")
+                }
+            }
+
             try cmd("audio") {
                 about("Record microphone audio to a WAV file.")
 
@@ -457,6 +466,10 @@ internal extension CaptureCLI {
                 try await printDevices(
                     provider: MacCaptureDeviceProvider()
                 )
+            }
+
+            command("test", "fail") { _ in
+                try simulatePartialRecordingFailure()
             }
 
             command("audio") { invocation in
@@ -1674,18 +1687,27 @@ internal extension CaptureCLI {
     static func writeError(
         _ error: Error
     ) {
-        guard let partialError = error as? CapturePartialRecordingError else {
+        if let partialError = error as? CapturePartialRecordingError {
+            CaptureCLINotifier.standard.partialRecordingRetained(
+                partialError
+            )
+
             fputs(
-                "capture: \(error.localizedDescription)\n",
+                partialRecordingErrorMessage(
+                    partialError
+                ),
                 stderr
             )
+
             return
         }
 
+        CaptureCLINotifier.standard.recordingFailed(
+            error
+        )
+
         fputs(
-            partialRecordingErrorMessage(
-                partialError
-            ),
+            "capture: \(error.localizedDescription)\n",
             stderr
         )
     }

@@ -3,12 +3,12 @@
   "failed_names" : [
 
   ],
-  "generated_at" : "2026-04-29T17:04:59Z",
-  "passed" : 2,
+  "generated_at" : "2026-05-01T15:24:25Z",
+  "passed" : 3,
   "results" : [
     {
       "display_name" : "configuration",
-      "duration_seconds" : 0.0013370513916015625,
+      "duration_seconds" : 0.0015009641647338867,
       "name" : "configuration",
       "status" : "passed",
       "tags" : [
@@ -18,16 +18,27 @@
     },
     {
       "display_name" : "device-provider",
-      "duration_seconds" : 0.003184080123901367,
+      "duration_seconds" : 0.005289912223815918,
       "name" : "device-provider",
       "status" : "passed",
       "tags" : [
         "devices",
         "provider"
       ]
+    },
+    {
+      "display_name" : "notification",
+      "duration_seconds" : 0.0006710290908813477,
+      "name" : "notification",
+      "status" : "passed",
+      "tags" : [
+        "cli",
+        "error",
+        "notification"
+      ]
     }
   ],
   "skipped" : 0,
   "title" : "Capture",
-  "total" : 2
+  "total" : 3
 }

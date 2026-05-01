@@ -5,6 +5,9 @@ import Terminal
 internal actor CaptureCLIProgressRenderer {
     private let recordingTimer: TerminalLiveStatusLine
     private let output: URL
+
+    private var recordingStartedAt: Date?
+    private var healthSnapshot: CaptureRecordingHealthSnapshot?
     private var recordingTimerStopped = false
     private var exportStatusLine: TerminalLiveStatusLine?
     private var exportStartedAt: Date?
@@ -22,6 +25,12 @@ internal actor CaptureCLIProgressRenderer {
         _ progress: CaptureSessionProgress
     ) async {
         switch progress {
+        case .recordingStarted(let startedAt):
+            recordingStartedAt = startedAt
+
+        case .recordingHealth(let snapshot):
+            healthSnapshot = snapshot
+
         case .recordingStopped(let durationSeconds):
             await stopRecordingTimer(
                 durationSeconds: durationSeconds
@@ -48,7 +57,7 @@ internal actor CaptureCLIProgressRenderer {
     func finishAfterSuccess() async {
         if !recordingTimerStopped {
             await stopRecordingTimer(
-                durationSeconds: 0
+                durationSeconds: fallbackDurationSeconds()
             )
         }
 
@@ -58,11 +67,15 @@ internal actor CaptureCLIProgressRenderer {
             )
             self.exportStatusLine = nil
         }
+
+        writeHealthWarnings()
     }
 
     func finishAfterError() async {
         if !recordingTimerStopped {
-            await recordingTimer.stop()
+            await recordingTimer.stop(
+                finalLine: "recording: failed"
+            )
             recordingTimerStopped = true
         }
 
@@ -72,6 +85,8 @@ internal actor CaptureCLIProgressRenderer {
             )
             self.exportStatusLine = nil
         }
+
+        writeHealthWarnings()
     }
 
     func exportDurationSeconds() -> TimeInterval? {
@@ -94,6 +109,23 @@ internal actor CaptureCLIProgressRenderer {
 }
 
 private extension CaptureCLIProgressRenderer {
+    func fallbackDurationSeconds() -> TimeInterval {
+        guard let recordingStartedAt else {
+            return 0
+        }
+
+        let duration = Date().timeIntervalSince(
+            recordingStartedAt
+        )
+
+        guard duration.isFinite,
+              duration >= 0 else {
+            return 0
+        }
+
+        return duration
+    }
+
     func stopRecordingTimer(
         durationSeconds: TimeInterval
     ) async {
@@ -104,8 +136,43 @@ private extension CaptureCLIProgressRenderer {
         recordingTimerStopped = true
 
         await recordingTimer.stop(
-            finalLine: "recording: stopped at \(TerminalDurationFormatter.format(durationSeconds))"
+            finalLine: recordingStoppedLine(
+                durationSeconds: durationSeconds
+            )
         )
+
+        writeHealthWarnings()
+    }
+
+    func recordingStoppedLine(
+        durationSeconds: TimeInterval
+    ) -> String {
+        let base = "recording: stopped at \(TerminalDurationFormatter.format(durationSeconds))"
+
+        guard let healthSnapshot else {
+            return base
+        }
+
+        let description = healthSnapshot.briefDescription
+
+        guard !description.isEmpty else {
+            return base
+        }
+
+        return "\(base)    \(description)"
+    }
+
+    func writeHealthWarnings() {
+        guard let healthSnapshot else {
+            return
+        }
+
+        for warning in healthSnapshot.warningDescriptions {
+            fputs(
+                "warning: \(warning)\n",
+                stderr
+            )
+        }
     }
 
     func startExportStatusLineIfNeeded(
@@ -120,16 +187,10 @@ private extension CaptureCLIProgressRenderer {
         }
 
         let frames = [
-            "⠋",
-            "⠙",
-            "⠹",
-            "⠸",
-            "⠼",
-            "⠴",
-            "⠦",
-            "⠧",
-            "⠇",
-            "⠏",
+            "-",
+            "\\",
+            "|",
+            "/",
         ]
 
         let statusLine = TerminalLiveStatusLine(

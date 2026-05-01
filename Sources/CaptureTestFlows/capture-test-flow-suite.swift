@@ -6,5 +6,6 @@ enum CaptureFlowSuite: TestFlowRegistry {
     static let flows: [TestFlow] = [
         configurationFlow,
         deviceProviderFlow,
+        notificationFlow,
     ]
 }
