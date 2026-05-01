@@ -10,6 +10,7 @@ internal final class ScreenCaptureVideoStreamOutput: NSObject, SCStreamOutput, S
     )
 
     private let writer: ScreenCaptureVideoWriter
+    private let stopSignal: CaptureStopSignal?
     private let lock = NSLock()
 
     private var totalSampleCount = 0
@@ -32,9 +33,11 @@ internal final class ScreenCaptureVideoStreamOutput: NSObject, SCStreamOutput, S
     private var stopError: Error?
 
     init(
-        writer: ScreenCaptureVideoWriter
+        writer: ScreenCaptureVideoWriter,
+        stopSignal: CaptureStopSignal? = nil
     ) {
         self.writer = writer
+        self.stopSignal = stopSignal
     }
 
     func stream(
@@ -97,9 +100,7 @@ internal final class ScreenCaptureVideoStreamOutput: NSObject, SCStreamOutput, S
         stopError = error
         lock.unlock()
 
-        writer.fail(
-            error
-        )
+        stopSignal?.stop()
     }
 
     func firstCompleteSampleAt() -> Date? {

@@ -50,10 +50,14 @@ public final class CaptureCompositionSession: Sendable {
             withIntermediateDirectories: true
         )
 
+        var shouldRemoveWorkingDirectory = false
+
         defer {
-            try? FileManager.default.removeItem(
-                at: workingDirectory
-            )
+            if shouldRemoveWorkingDirectory {
+                try? FileManager.default.removeItem(
+                    at: workingDirectory
+                )
+            }
         }
 
         let screenVideoOutput = workingDirectory.appendingPathComponent(
@@ -248,6 +252,8 @@ public final class CaptureCompositionSession: Sendable {
                 mode: .rendering
             )
         )
+
+        shouldRemoveWorkingDirectory = true
 
         return CaptureCompositionRecordingResult(
             output: configuration.output,

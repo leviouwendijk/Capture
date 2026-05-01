@@ -198,7 +198,8 @@ public struct ScreenCaptureVideoRecorder: Sendable {
         )
 
         let streamOutput = ScreenCaptureVideoStreamOutput(
-            writer: writer
+            writer: writer,
+            stopSignal: stopSignal
         )
 
         let stream = SCStream(

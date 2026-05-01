@@ -58,7 +58,8 @@ public struct ScreenCaptureSystemAudioRecorder: Sendable {
         )
 
         let streamOutput = ScreenCaptureSystemAudioStreamOutput(
-            writer: writer
+            writer: writer,
+            stopSignal: stopSignal
         )
 
         let stream = SCStream(

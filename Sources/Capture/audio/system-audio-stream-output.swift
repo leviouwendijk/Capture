@@ -7,14 +7,17 @@ internal final class ScreenCaptureSystemAudioStreamOutput: NSObject, SCStreamOut
     )
 
     private let writer: ScreenCaptureSystemAudioWriter
+    private let stopSignal: CaptureStopSignal?
     private let lock = NSLock()
 
     private var stopError: Error?
 
     init(
-        writer: ScreenCaptureSystemAudioWriter
+        writer: ScreenCaptureSystemAudioWriter,
+        stopSignal: CaptureStopSignal? = nil
     ) {
         self.writer = writer
+        self.stopSignal = stopSignal
     }
 
     func stream(
@@ -43,8 +46,6 @@ internal final class ScreenCaptureSystemAudioStreamOutput: NSObject, SCStreamOut
         stopError = error
         lock.unlock()
 
-        writer.fail(
-            error
-        )
+        stopSignal?.stop()
     }
 }

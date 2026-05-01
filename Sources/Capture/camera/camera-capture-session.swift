@@ -50,10 +50,14 @@ public final class CameraCaptureSession: Sendable {
             withIntermediateDirectories: true
         )
 
+        var shouldRemoveWorkingDirectory = false
+
         defer {
-            try? FileManager.default.removeItem(
-                at: workingDirectory
-            )
+            if shouldRemoveWorkingDirectory {
+                try? FileManager.default.removeItem(
+                    at: workingDirectory
+                )
+            }
         }
 
         let videoOutput = workingDirectory.appendingPathComponent(
@@ -148,6 +152,8 @@ public final class CameraCaptureSession: Sendable {
                 mode: exportMode
             )
         )
+
+        shouldRemoveWorkingDirectory = true
 
         return CaptureCameraRecordingResult(
             output: configuration.output,
