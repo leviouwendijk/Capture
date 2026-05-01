@@ -25,7 +25,7 @@ enum CaptureCLI {
 
 private extension CaptureCLI {
     static func spec() throws -> CommandSpec {
-        try cmd("capture") {
+        try cmd("capturer") {
             about("Native macOS screen and audio capture.")
             discussion("Records screen video and CoreAudio-backed microphone input.")
 
@@ -131,6 +131,210 @@ private extension CaptureCLI {
 
                 example(
                     "capture video --duration 5 --output /tmp/capture-video.mov"
+                )
+            }
+
+            try cmd("camera") {
+                about("Record camera video and microphone audio.")
+
+                opt(
+                    "camera",
+                    short: "c",
+                    as: String.self,
+                    help: "Camera video input device name or identifier."
+                )
+
+                opt(
+                    "audio",
+                    short: "a",
+                    as: String.self,
+                    help: "Audio input device name or identifier."
+                )
+
+                opt(
+                    "output",
+                    short: "o",
+                    as: String.self,
+                    arity: .required,
+                    help: "Output .mov or .mp4 file."
+                )
+
+                opt(
+                    "duration",
+                    short: "d",
+                    as: Int.self,
+                    help: "Duration in seconds."
+                )
+
+                opt(
+                    "fps",
+                    as: Int.self,
+                    help: "Video frame rate."
+                )
+
+                opt(
+                    "quality",
+                    short: "q",
+                    as: String.self,
+                    help: "Video quality preset: compact, standard, high, archival."
+                )
+
+                opt(
+                    "bitrate",
+                    as: Int.self,
+                    help: "Explicit video bitrate in bits per second. Overrides --quality."
+                )
+
+                opt(
+                    "mic-gain",
+                    as: Double.self,
+                    help: "Microphone gain multiplier. Defaults to 1.0."
+                )
+
+                example(
+                    "capture camera --camera \"Studio Display Camera\" --audio ext-in --duration 5 --output ~/Desktop/camera.mov"
+                )
+            }
+
+            try cmd("compose") {
+                about("Record screen, camera, and audio into a composed layout.")
+
+                opt(
+                    "camera",
+                    short: "c",
+                    as: String.self,
+                    help: "Camera video input device name or identifier."
+                )
+
+                opt(
+                    "audio",
+                    short: "a",
+                    as: String.self,
+                    help: "Audio input device name or identifier."
+                )
+
+                flag(
+                    "system-audio",
+                    help: "Capture system audio as a separate audio track."
+                )
+
+                opt(
+                    "audio-layout",
+                    as: String.self,
+                    help: "Audio layout: separate or mixed. Defaults to separate."
+                )
+
+                opt(
+                    "mic-gain",
+                    as: Double.self,
+                    help: "Microphone gain multiplier. Defaults to 1.0."
+                )
+
+                opt(
+                    "system-gain",
+                    as: Double.self,
+                    help: "System audio gain multiplier. Defaults to 1.0."
+                )
+
+                opt(
+                    "output",
+                    short: "o",
+                    as: String.self,
+                    arity: .required,
+                    help: "Output .mov or .mp4 file."
+                )
+
+                opt(
+                    "duration",
+                    short: "d",
+                    as: Int.self,
+                    help: "Duration in seconds."
+                )
+
+                opt(
+                    "width",
+                    as: Int.self,
+                    help: "Composition canvas width. Defaults to selected display width."
+                )
+
+                opt(
+                    "height",
+                    as: Int.self,
+                    help: "Composition canvas height. Defaults to selected display height."
+                )
+
+                opt(
+                    "fps",
+                    as: Int.self,
+                    help: "Composition frame rate."
+                )
+
+                opt(
+                    "quality",
+                    short: "q",
+                    as: String.self,
+                    help: "Video quality preset: compact, standard, high, archival."
+                )
+
+                opt(
+                    "bitrate",
+                    as: Int.self,
+                    help: "Explicit video bitrate in bits per second. Overrides --quality."
+                )
+
+                flag(
+                    "cursor",
+                    help: "Show the cursor in the screen source."
+                )
+
+                opt(
+                    "layout",
+                    as: String.self,
+                    help: "Composition layout: overlay or side-by-side."
+                )
+
+                opt(
+                    "overlay-source",
+                    as: String.self,
+                    help: "Overlay source: camera or screen. Defaults to camera."
+                )
+
+                opt(
+                    "overlay-width",
+                    as: Double.self,
+                    help: "Overlay width as canvas ratio. Defaults to 0.24."
+                )
+
+                opt(
+                    "overlay-x",
+                    as: String.self,
+                    help: "Overlay horizontal placement: left, center, right."
+                )
+
+                opt(
+                    "overlay-y",
+                    as: String.self,
+                    help: "Overlay vertical placement: top, middle, bottom."
+                )
+
+                opt(
+                    "overlay-margin",
+                    as: Int.self,
+                    help: "Overlay margin in pixels. Defaults to 32."
+                )
+
+                opt(
+                    "gap",
+                    as: Int.self,
+                    help: "Gap in pixels for side-by-side layout. Defaults to 24."
+                )
+
+                example(
+                    "capture compose --camera \"Studio Display Camera\" --audio ext-in --layout overlay --overlay-x right --overlay-y bottom --duration 10 --output ~/Desktop/composed.mov"
+                )
+
+                example(
+                    "capture compose --camera \"Studio Display Camera\" --audio ext-in --layout side-by-side --duration 10 --output ~/Desktop/side-by-side.mov"
                 )
             }
 
@@ -268,6 +472,18 @@ private extension CaptureCLI {
                 )
             }
 
+            command("camera") { invocation in
+                try await recordCamera(
+                    invocation: invocation
+                )
+            }
+
+            command("compose") { invocation in
+                try await recordComposition(
+                    invocation: invocation
+                )
+            }
+
             command("record") { invocation in
                 try await record(
                     invocation: invocation
@@ -280,6 +496,7 @@ private extension CaptureCLI {
         provider: CaptureDeviceProvider
     ) async throws {
         let displays = try await provider.displays()
+        let videoInputs = try await provider.videoInputs()
         let audioInputs = try await provider.audioInputs()
 
         let document = TerminalDetailDocument(
@@ -292,6 +509,17 @@ private extension CaptureCLI {
                             label: "devices",
                             values: labels(
                                 for: displays
+                            )
+                        ),
+                    ]
+                ),
+                .init(
+                    title: "Video Inputs",
+                    items: [
+                        .list(
+                            label: "devices",
+                            values: labels(
+                                for: videoInputs
                             )
                         ),
                     ]
@@ -469,6 +697,316 @@ private extension CaptureCLI {
         )
 
         writeVideoSummary(
+            result: result
+        )
+    }
+
+    static func recordCamera(
+        invocation: ParsedInvocation
+    ) async throws {
+        let outputString = try invocation.value(
+            "output",
+            as: String.self
+        ).unwrap(
+            message: "Missing --output."
+        )
+
+        let output = URL(
+            fileURLWithPath: outputString.expandingTilde()
+        )
+
+        let cameraName = try invocation.value(
+            "camera",
+            as: String.self
+        )
+
+        let audioName = try invocation.value(
+            "audio",
+            as: String.self
+        ) ?? "ext-in"
+
+        let durationSeconds = try invocation.value(
+            "duration",
+            as: Int.self
+        )
+
+        let fps = try invocation.value(
+            "fps",
+            as: Int.self
+        ) ?? 30
+
+        let quality = try videoQuality(
+            invocation: invocation
+        )
+
+        let bitrate = try invocation.value(
+            "bitrate",
+            as: Int.self
+        )
+
+        let micGain = try invocation.value(
+            "mic-gain",
+            as: Double.self
+        ) ?? 1.0
+
+        let video = try CaptureVideoOptions(
+            fps: fps,
+            cursor: false,
+            quality: quality,
+            bitrate: bitrate
+        )
+
+        let audio = try CaptureAudioOptions(
+            device: .name(
+                audioName
+            )
+        )
+
+        let audioMix = try CaptureAudioMixOptions(
+            layout: .separate,
+            microphoneGain: micGain,
+            systemGain: 1.0
+        )
+
+        let configuration = try CaptureCameraConfiguration(
+            camera: cameraName.map {
+                .name(
+                    $0
+                )
+            } ?? .systemDefault,
+            video: video,
+            audio: audio,
+            audioMix: audioMix,
+            container: try container(
+                for: output
+            ),
+            output: output
+        )
+
+        fputs(
+            "capture: recording camera \(cameraName ?? "default") with audio \(audioName)\n",
+            stderr
+        )
+
+        let provider = MacCaptureDeviceProvider()
+        let result: CaptureCameraRecordingResult
+
+        if let durationSeconds {
+            result = try await CameraCaptureSession(
+                configuration: configuration,
+                options: try CaptureRecordOptions(
+                    durationSeconds: durationSeconds
+                ),
+                deviceProvider: provider
+            ).start()
+        } else {
+            fputs(
+                "capture: press Ctrl-C, SIGTERM, or q + return to stop\n",
+                stderr
+            )
+
+            let stopSignal = CaptureStopSignal()
+            let listener = CaptureCLIStopListener(
+                stopSignal: stopSignal
+            )
+
+            listener.start()
+
+            do {
+                result = try await CameraCaptureSession(
+                    configuration: configuration,
+                    deviceProvider: provider
+                ).startUntilStopped(
+                    stopSignal: stopSignal
+                )
+
+                listener.stop()
+            } catch {
+                listener.stop()
+                throw error
+            }
+        }
+
+        fputs(
+            """
+            capture: wrote camera recording \(result.output.path)
+            camera: \(result.camera.name)
+            audio: \(result.audioInput.name)
+            duration: \(result.durationSeconds)s
+            frames: \(result.videoFrameCount)
+            video: \(result.video.width)x\(result.video.height) @ \(result.video.fps) fps
+            mic offset: \(String(format: "%.3f", result.microphoneStartOffsetSeconds))s
+
+            """,
+            stderr
+        )
+    }
+
+    static func recordComposition(
+        invocation: ParsedInvocation
+    ) async throws {
+        let outputString = try invocation.value(
+            "output",
+            as: String.self
+        ).unwrap(
+            message: "Missing --output."
+        )
+
+        let output = URL(
+            fileURLWithPath: outputString.expandingTilde()
+        )
+
+        let cameraName = try invocation.value(
+            "camera",
+            as: String.self
+        )
+
+        let audioName = try invocation.value(
+            "audio",
+            as: String.self
+        ) ?? "ext-in"
+
+        let durationSeconds = try invocation.value(
+            "duration",
+            as: Int.self
+        )
+
+        let width = try invocation.value(
+            "width",
+            as: Int.self
+        )
+
+        let height = try invocation.value(
+            "height",
+            as: Int.self
+        )
+
+        let fps = try invocation.value(
+            "fps",
+            as: Int.self
+        ) ?? 24
+
+        let quality = try videoQuality(
+            invocation: invocation
+        )
+
+        let bitrate = try invocation.value(
+            "bitrate",
+            as: Int.self
+        )
+
+        let cursor = try invocation.flag(
+            "cursor",
+            default: true
+        )
+
+        let systemAudioEnabled = try invocation.flag(
+            "system-audio"
+        )
+
+        let micGain = try invocation.value(
+            "mic-gain",
+            as: Double.self
+        ) ?? 1.0
+
+        let systemGain = try invocation.value(
+            "system-gain",
+            as: Double.self
+        ) ?? 1.0
+
+        let video = try CaptureVideoOptions(
+            width: width,
+            height: height,
+            fps: fps,
+            cursor: cursor,
+            quality: quality,
+            bitrate: bitrate
+        )
+
+        let audio = try CaptureAudioOptions(
+            device: .name(
+                audioName
+            )
+        )
+
+        let systemAudio = try CaptureSystemAudioOptions(
+            enabled: systemAudioEnabled
+        )
+
+        let audioMix = try CaptureAudioMixOptions(
+            layout: try compositionAudioLayout(
+                invocation: invocation
+            ),
+            microphoneGain: micGain,
+            systemGain: systemGain
+        )
+
+        let layout = try compositionLayout(
+            invocation: invocation
+        )
+
+        let configuration = try CaptureCompositionConfiguration(
+            camera: cameraName.map {
+                .name(
+                    $0
+                )
+            } ?? .systemDefault,
+            video: video,
+            audio: audio,
+            systemAudio: systemAudio,
+            audioMix: audioMix,
+            layout: layout,
+            container: try container(
+                for: output
+            ),
+            output: output
+        )
+
+        fputs(
+            "capture: recording composed screen + camera with audio \(audioName)\n",
+            stderr
+        )
+
+        let provider = MacCaptureDeviceProvider()
+        let result: CaptureCompositionRecordingResult
+
+        if let durationSeconds {
+            result = try await CaptureCompositionSession(
+                configuration: configuration,
+                options: try CaptureRecordOptions(
+                    durationSeconds: durationSeconds
+                ),
+                deviceProvider: provider
+            ).start()
+        } else {
+            fputs(
+                "capture: press Ctrl-C, SIGTERM, or q + return to stop\n",
+                stderr
+            )
+
+            let stopSignal = CaptureStopSignal()
+            let listener = CaptureCLIStopListener(
+                stopSignal: stopSignal
+            )
+
+            listener.start()
+
+            do {
+                result = try await CaptureCompositionSession(
+                    configuration: configuration,
+                    deviceProvider: provider
+                ).startUntilStopped(
+                    stopSignal: stopSignal
+                )
+
+                listener.stop()
+            } catch {
+                listener.stop()
+                throw error
+            }
+        }
+
+        writeCompositionSummary(
             result: result
         )
     }
@@ -763,6 +1301,161 @@ private extension CaptureCLI {
         }
 
         return quality
+    }
+
+    static func compositionLayout(
+        invocation: ParsedInvocation
+    ) throws -> CaptureCompositionLayout {
+        let layout = try invocation.value(
+            "layout",
+            as: String.self
+        ) ?? "overlay"
+
+        switch layout {
+        case "overlay":
+            let overlaySource = try compositionSource(
+                value: invocation.value(
+                    "overlay-source",
+                    as: String.self
+                ) ?? "camera"
+            )
+
+            let overlayWidth = try invocation.value(
+                "overlay-width",
+                as: Double.self
+            ) ?? 0.24
+
+            let overlayX = try horizontalPlacement(
+                value: invocation.value(
+                    "overlay-x",
+                    as: String.self
+                ) ?? "right"
+            )
+
+            let overlayY = try verticalPlacement(
+                value: invocation.value(
+                    "overlay-y",
+                    as: String.self
+                ) ?? "bottom"
+            )
+
+            let overlayMargin = try invocation.value(
+                "overlay-margin",
+                as: Int.self
+            ) ?? 32
+
+            switch overlaySource {
+            case .camera:
+                return try .screenWithCameraOverlay(
+                    cameraWidthRatio: overlayWidth,
+                    horizontal: overlayX,
+                    vertical: overlayY,
+                    margin: overlayMargin
+                )
+
+            case .screen:
+                return try .cameraWithScreenOverlay(
+                    screenWidthRatio: overlayWidth,
+                    horizontal: overlayX,
+                    vertical: overlayY,
+                    margin: overlayMargin
+                )
+            }
+
+        case "side-by-side":
+            return try .screenAndCameraSideBySide(
+                gap: try invocation.value(
+                    "gap",
+                    as: Int.self
+                ) ?? 24
+            )
+
+        default:
+            throw CaptureError.videoCapture(
+                "Invalid composition layout: \(layout). Expected overlay or side-by-side."
+            )
+        }
+    }
+
+    static func compositionSource(
+        value: String
+    ) throws -> CaptureCompositionSource {
+        guard let source = CaptureCompositionSource(
+            rawValue: value
+        ) else {
+            throw CaptureError.videoCapture(
+                "Invalid composition source: \(value). Expected screen or camera."
+            )
+        }
+
+        return source
+    }
+
+    static func horizontalPlacement(
+        value: String
+    ) throws -> CaptureHorizontalPlacement {
+        guard let placement = CaptureHorizontalPlacement(
+            rawValue: value
+        ) else {
+            throw CaptureError.videoCapture(
+                "Invalid horizontal placement: \(value). Expected left, center, or right."
+            )
+        }
+
+        return placement
+    }
+
+    static func verticalPlacement(
+        value: String
+    ) throws -> CaptureVerticalPlacement {
+        guard let placement = CaptureVerticalPlacement(
+            rawValue: value
+        ) else {
+            throw CaptureError.videoCapture(
+                "Invalid vertical placement: \(value). Expected top, middle, or bottom."
+            )
+        }
+
+        return placement
+    }
+
+    static func compositionAudioLayout(
+        invocation: ParsedInvocation
+    ) throws -> CaptureAudioLayout {
+        let value = try invocation.value(
+            "audio-layout",
+            as: String.self
+        ) ?? CaptureAudioLayout.separate.rawValue
+
+        guard let layout = CaptureAudioLayout(
+            rawValue: value
+        ) else {
+            throw CaptureError.audioCapture(
+                "Invalid audio layout: \(value). Expected separate or mixed."
+            )
+        }
+
+        return layout
+    }
+
+    static func writeCompositionSummary(
+        result: CaptureCompositionRecordingResult
+    ) {
+        fputs(
+            """
+            capture: wrote composed recording \(result.output.path)
+            duration: \(result.durationSeconds)s
+            video: \(result.video.width)x\(result.video.height) @ \(result.video.fps) fps
+            screen frames: \(result.screenFrameCount)
+            camera frames: \(result.cameraFrameCount)
+            audio tracks: \(result.audioTrackCount)
+            audio layout: \(result.audioLayout.rawValue)
+            mic offset: \(String(format: "%.3f", result.microphoneStartOffsetSeconds))s
+            system offset: \(result.systemAudioStartOffsetSeconds.map { String(format: "%.3f", $0) + "s" } ?? "none")
+
+            """,
+            stderr
+        )
     }
 
     static func container(

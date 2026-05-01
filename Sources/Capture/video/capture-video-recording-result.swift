@@ -1,8 +1,4 @@
-// import AVFoundation
-// import CoreGraphics
-// import CoreMedia
 import Foundation
-// import ScreenCaptureKit
 
 public struct CaptureVideoRecordingResult: Sendable, Codable, Hashable {
     public let output: URL
@@ -12,6 +8,7 @@ public struct CaptureVideoRecordingResult: Sendable, Codable, Hashable {
     public let video: CaptureResolvedVideoOptions
     public let diagnostics: CaptureVideoRecordingDiagnostics
     public let startedAt: Date
+    public let startedHostTimeSeconds: TimeInterval
     public let firstSampleAt: Date?
     public let firstPresentationTimeSeconds: Double?
 
@@ -23,6 +20,7 @@ public struct CaptureVideoRecordingResult: Sendable, Codable, Hashable {
         video: CaptureResolvedVideoOptions,
         diagnostics: CaptureVideoRecordingDiagnostics,
         startedAt: Date,
+        startedHostTimeSeconds: TimeInterval,
         firstSampleAt: Date?,
         firstPresentationTimeSeconds: Double?
     ) {
@@ -33,8 +31,8 @@ public struct CaptureVideoRecordingResult: Sendable, Codable, Hashable {
         self.video = video
         self.diagnostics = diagnostics
         self.startedAt = startedAt
+        self.startedHostTimeSeconds = startedHostTimeSeconds
         self.firstSampleAt = firstSampleAt
         self.firstPresentationTimeSeconds = firstPresentationTimeSeconds
     }
 }
-

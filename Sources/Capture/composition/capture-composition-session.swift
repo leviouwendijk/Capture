@@ -1,26 +1,22 @@
-import AVFoundation
 import Foundation
 
-public final class CaptureSession: Sendable {
-    public let configuration: CaptureConfiguration
+public final class CaptureCompositionSession: Sendable {
+    public let configuration: CaptureCompositionConfiguration
     public let options: CaptureRecordOptions
     public let deviceProvider: any CaptureDeviceProvider
-    public let progress: CaptureSessionProgressHandler?
 
     public init(
-        configuration: CaptureConfiguration,
+        configuration: CaptureCompositionConfiguration,
         options: CaptureRecordOptions = .standard,
-        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
-        progress: CaptureSessionProgressHandler? = nil
+        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider()
     ) {
         self.configuration = configuration
         self.options = options
         self.deviceProvider = deviceProvider
-        self.progress = progress
     }
 
     @discardableResult
-    public func start() async throws -> CaptureRecordingResult {
+    public func start() async throws -> CaptureCompositionRecordingResult {
         let stopSignal = CaptureStopSignal()
 
         Task {
@@ -39,10 +35,10 @@ public final class CaptureSession: Sendable {
     @discardableResult
     public func startUntilStopped(
         stopSignal: CaptureStopSignal
-    ) async throws -> CaptureRecordingResult {
+    ) async throws -> CaptureCompositionRecordingResult {
         let workingDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(
-                "capture-\(UUID().uuidString)",
+                "capture-composition-\(UUID().uuidString)",
                 isDirectory: true
             )
 
@@ -57,8 +53,14 @@ public final class CaptureSession: Sendable {
             )
         }
 
-        let videoOutput = workingDirectory.appendingPathComponent(
-            "video.mov"
+        let screenVideoOutput = workingDirectory.appendingPathComponent(
+            "screen-video.mov"
+        )
+        let cameraVideoOutput = workingDirectory.appendingPathComponent(
+            "camera-video.mov"
+        )
+        let composedVideoOutput = workingDirectory.appendingPathComponent(
+            "composed-video.mov"
         )
         let audioOutput = workingDirectory.appendingPathComponent(
             "audio.wav"
@@ -67,14 +69,23 @@ public final class CaptureSession: Sendable {
             "system-audio.m4a"
         )
 
-        let videoConfiguration = try CaptureConfiguration(
+        let screenVideoConfiguration = try CaptureConfiguration(
             display: configuration.display,
             video: configuration.video,
             audio: configuration.audio,
             systemAudio: configuration.systemAudio,
             audioMix: configuration.audioMix,
             container: .mov,
-            output: videoOutput
+            output: screenVideoOutput
+        )
+
+        let cameraVideoConfiguration = try CaptureCameraConfiguration(
+            camera: configuration.camera,
+            video: configuration.video,
+            audio: configuration.audio,
+            audioMix: configuration.audioMix,
+            container: .mov,
+            output: cameraVideoOutput
         )
 
         let audioConfiguration = try CaptureConfiguration(
@@ -97,8 +108,14 @@ public final class CaptureSession: Sendable {
             output: systemAudioOutput
         )
 
-        async let videoResult = ScreenCaptureVideoRecorder().recordVideoUntilStopped(
-            configuration: videoConfiguration,
+        async let screenVideoResult = ScreenCaptureVideoRecorder().recordVideoUntilStopped(
+            configuration: screenVideoConfiguration,
+            stopSignal: stopSignal,
+            deviceProvider: deviceProvider
+        )
+
+        async let cameraVideoResult = CameraVideoRecorder().recordVideoUntilStopped(
+            configuration: cameraVideoConfiguration,
             stopSignal: stopSignal,
             deviceProvider: deviceProvider
         )
@@ -114,26 +131,49 @@ public final class CaptureSession: Sendable {
             stopSignal: stopSignal
         )
 
-        let capturedVideoResult = try await videoResult
+        let capturedScreenVideoResult = try await screenVideoResult
+        let capturedCameraVideoResult = try await cameraVideoResult
         let capturedAudioResult = try await audioResult
         let capturedSystemAudioResult = try await systemAudioResult
 
-        let capturedDurationSeconds = [
-            capturedVideoResult.durationSeconds,
-            capturedAudioResult.durationSeconds,
-            capturedSystemAudioResult?.durationSeconds ?? 0,
-        ].max() ?? 0
+        let screenVideoStartHostTimeSeconds = capturedScreenVideoResult.firstPresentationTimeSeconds
+            ?? capturedScreenVideoResult.startedHostTimeSeconds
+        let cameraVideoStartHostTimeSeconds = capturedCameraVideoResult.firstPresentationTimeSeconds
+            ?? capturedCameraVideoResult.startedHostTimeSeconds
 
-        await report(
-            .recordingStopped(
-                durationSeconds: TimeInterval(
-                    capturedDurationSeconds
-                )
-            )
+        let videoTimelineStartHostTimeSeconds = earliestHostTime(
+            [
+                screenVideoStartHostTimeSeconds,
+                cameraVideoStartHostTimeSeconds,
+            ]
         )
 
-        let videoTimelineStartHostTimeSeconds = capturedVideoResult.firstPresentationTimeSeconds
-            ?? capturedVideoResult.startedHostTimeSeconds
+        let screenVideoStartOffsetSeconds = normalizedTimelineOffset(
+            screenVideoStartHostTimeSeconds - videoTimelineStartHostTimeSeconds
+        )
+
+        let cameraVideoStartOffsetSeconds = normalizedTimelineOffset(
+            cameraVideoStartHostTimeSeconds - videoTimelineStartHostTimeSeconds
+        )
+
+        let composedVideoResult = try await CaptureCompositionVideoRenderer().render(
+            inputs: [
+                CaptureCompositionVideoInput(
+                    source: .screen,
+                    url: screenVideoOutput,
+                    startOffsetSeconds: screenVideoStartOffsetSeconds
+                ),
+                CaptureCompositionVideoInput(
+                    source: .camera,
+                    url: cameraVideoOutput,
+                    startOffsetSeconds: cameraVideoStartOffsetSeconds
+                ),
+            ],
+            layout: configuration.layout,
+            video: capturedScreenVideoResult.video,
+            output: composedVideoOutput,
+            container: .mov
+        )
 
         let microphoneStartOffsetSeconds = normalizedTimelineOffset(
             capturedAudioResult.startedHostTimeSeconds - videoTimelineStartHostTimeSeconds
@@ -168,36 +208,20 @@ public final class CaptureSession: Sendable {
             )
         }
 
-        let exportMode: CaptureExportMode = configuration.audioMix.requiresAudioRendering
-            ? .rendering
-            : .passthrough
-
-        await report(
-            .exportStarted(
-                mode: exportMode
-            )
-        )
-
         try await CaptureAssetMuxer().mux(
-            video: videoOutput,
+            video: composedVideoOutput,
             audio: audioInputs,
             audioMix: configuration.audioMix,
             output: configuration.output,
             container: configuration.container
         )
 
-        await report(
-            .exportFinished(
-                mode: exportMode
-            )
-        )
-
-        return CaptureRecordingResult(
+        return CaptureCompositionRecordingResult(
             output: configuration.output,
-            durationSeconds: capturedDurationSeconds,
-            videoFrameCount: capturedVideoResult.frameCount,
-            video: capturedVideoResult.video,
-            videoDiagnostics: capturedVideoResult.diagnostics,
+            durationSeconds: composedVideoResult.durationSeconds,
+            video: composedVideoResult.video,
+            screenFrameCount: capturedScreenVideoResult.frameCount,
+            cameraFrameCount: capturedCameraVideoResult.frameCount,
             audioTrackCount: configuration.audioMix.requiresAudioRendering
                 ? 1
                 : audioInputs.count,
@@ -207,20 +231,27 @@ public final class CaptureSession: Sendable {
             microphoneGain: configuration.audioMix.microphoneGain,
             systemGain: configuration.audioMix.systemGain,
             microphoneStartOffsetSeconds: microphoneStartOffsetSeconds,
-            systemAudioStartOffsetSeconds: systemAudioStartOffsetSeconds,
-            systemAudioSampleBufferCount: capturedSystemAudioResult?.sampleBufferCount
-        )
-    }
-
-    public func stop() async throws {
-        throw CaptureError.recordingNotImplemented(
-            "CaptureSession.stop() is not implemented for externally owned sessions yet."
+            systemAudioStartOffsetSeconds: systemAudioStartOffsetSeconds
         )
     }
 }
 
-extension CaptureSession {
-    internal func normalizedTimelineOffset(
+private extension CaptureCompositionSession {
+    func earliestHostTime(
+        _ values: [TimeInterval]
+    ) -> TimeInterval {
+        values
+            .filter(\.isFinite)
+            .min() ?? CaptureClock.hostTimeSeconds()
+    }
+
+    // func earliestDate(
+    //     _ dates: [Date]
+    // ) -> Date {
+    //     dates.min() ?? Date()
+    // }
+
+    func normalizedTimelineOffset(
         _ offset: TimeInterval
     ) -> TimeInterval {
         guard offset.isFinite else {
@@ -234,19 +265,7 @@ extension CaptureSession {
         return offset
     }
 
-    internal func report(
-        _ event: CaptureSessionProgress
-    ) async {
-        guard let progress else {
-            return
-        }
-
-        await progress(
-            event
-        )
-    }
-
-    internal func recordSystemAudioIfNeeded(
+    func recordSystemAudioIfNeeded(
         configuration: CaptureConfiguration,
         stopSignal: CaptureStopSignal
     ) async throws -> CaptureSystemAudioRecordingResult? {

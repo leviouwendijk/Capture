@@ -25,10 +25,14 @@ public struct CoreAudioRecorder: Sendable {
             output: configuration.output
         )
 
-        let startedAt = Date()
+        var startedAt = Date()
+        var startedHostTimeSeconds = CaptureClock.hostTimeSeconds()
 
         do {
             try recorder.start()
+
+            startedAt = Date()
+            startedHostTimeSeconds = CaptureClock.hostTimeSeconds()
 
             try await Task.sleep(
                 nanoseconds: UInt64(options.durationSeconds) * 1_000_000_000
@@ -44,7 +48,8 @@ public struct CoreAudioRecorder: Sendable {
             output: configuration.output,
             device: resolved.audioInput,
             durationSeconds: options.durationSeconds,
-            startedAt: startedAt
+            startedAt: startedAt,
+            startedHostTimeSeconds: startedHostTimeSeconds
         )
     }
 
@@ -69,10 +74,14 @@ public struct CoreAudioRecorder: Sendable {
             output: configuration.output
         )
 
-        let startedAt = Date()
+        var startedAt = Date()
+        var startedHostTimeSeconds = CaptureClock.hostTimeSeconds()
 
         do {
             try recorder.start()
+
+            startedAt = Date()
+            startedHostTimeSeconds = CaptureClock.hostTimeSeconds()
 
             await stopSignal.wait()
 
@@ -93,7 +102,8 @@ public struct CoreAudioRecorder: Sendable {
                     ).rounded()
                 )
             ),
-            startedAt: startedAt
+            startedAt: startedAt,
+            startedHostTimeSeconds: startedHostTimeSeconds
         )
     }
 }

@@ -1,0 +1,148 @@
+import Foundation
+
+public final class CameraCaptureSession: Sendable {
+    public let configuration: CaptureCameraConfiguration
+    public let options: CaptureRecordOptions
+    public let deviceProvider: any CaptureDeviceProvider
+
+    public init(
+        configuration: CaptureCameraConfiguration,
+        options: CaptureRecordOptions = .standard,
+        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider()
+    ) {
+        self.configuration = configuration
+        self.options = options
+        self.deviceProvider = deviceProvider
+    }
+
+    @discardableResult
+    public func start() async throws -> CaptureCameraRecordingResult {
+        let stopSignal = CaptureStopSignal()
+
+        Task {
+            try? await Task.sleep(
+                nanoseconds: UInt64(options.durationSeconds) * 1_000_000_000
+            )
+
+            stopSignal.stop()
+        }
+
+        return try await startUntilStopped(
+            stopSignal: stopSignal
+        )
+    }
+
+    @discardableResult
+    public func startUntilStopped(
+        stopSignal: CaptureStopSignal
+    ) async throws -> CaptureCameraRecordingResult {
+        let workingDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "capture-camera-\(UUID().uuidString)",
+                isDirectory: true
+            )
+
+        try FileManager.default.createDirectory(
+            at: workingDirectory,
+            withIntermediateDirectories: true
+        )
+
+        defer {
+            try? FileManager.default.removeItem(
+                at: workingDirectory
+            )
+        }
+
+        let videoOutput = workingDirectory.appendingPathComponent(
+            "camera-video.mov"
+        )
+        let audioOutput = workingDirectory.appendingPathComponent(
+            "audio.wav"
+        )
+
+        let videoConfiguration = try CaptureCameraConfiguration(
+            camera: configuration.camera,
+            video: configuration.video,
+            audio: configuration.audio,
+            audioMix: configuration.audioMix,
+            container: .mov,
+            output: videoOutput
+        )
+
+        let audioConfiguration = try CaptureConfiguration(
+            video: configuration.video,
+            audio: configuration.audio,
+            output: audioOutput
+        )
+
+        async let videoResult = CameraVideoRecorder().recordVideoUntilStopped(
+            configuration: videoConfiguration,
+            stopSignal: stopSignal,
+            deviceProvider: deviceProvider
+        )
+
+        async let audioResult = CoreAudioRecorder().recordAudioUntilStopped(
+            configuration: audioConfiguration,
+            stopSignal: stopSignal,
+            deviceProvider: deviceProvider
+        )
+
+        let capturedVideoResult = try await videoResult
+        let capturedAudioResult = try await audioResult
+
+        let videoTimelineStartHostTimeSeconds = capturedVideoResult.firstPresentationTimeSeconds
+            ?? capturedVideoResult.startedHostTimeSeconds
+
+        let microphoneStartOffsetSeconds = normalizedTimelineOffset(
+            capturedAudioResult.startedHostTimeSeconds - videoTimelineStartHostTimeSeconds
+        )
+
+        let audioInputs = [
+            CaptureMuxAudioInput(
+                url: audioOutput,
+                role: .microphone,
+                gain: configuration.audioMix.microphoneGain,
+                startOffsetSeconds: microphoneStartOffsetSeconds
+            ),
+        ]
+
+        try await CaptureAssetMuxer().mux(
+            video: videoOutput,
+            audio: audioInputs,
+            audioMix: configuration.audioMix,
+            output: configuration.output,
+            container: configuration.container
+        )
+
+        return CaptureCameraRecordingResult(
+            output: configuration.output,
+            durationSeconds: max(
+                capturedVideoResult.durationSeconds,
+                capturedAudioResult.durationSeconds
+            ),
+            videoFrameCount: capturedVideoResult.frameCount,
+            video: capturedVideoResult.video,
+            camera: capturedVideoResult.camera,
+            audioInput: capturedAudioResult.device,
+            audioTrackCount: configuration.audioMix.requiresAudioRendering ? 1 : 1,
+            microphoneGain: configuration.audioMix.microphoneGain,
+            microphoneStartOffsetSeconds: microphoneStartOffsetSeconds
+        )
+    }
+}
+
+private extension CameraCaptureSession {
+    func normalizedTimelineOffset(
+        _ offset: TimeInterval
+    ) -> TimeInterval {
+        guard offset.isFinite else {
+            return 0
+        }
+
+        if abs(offset) < 0.010 {
+            return 0
+        }
+
+        return offset
+    }
+}

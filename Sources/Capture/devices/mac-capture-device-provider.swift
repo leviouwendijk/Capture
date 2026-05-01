@@ -7,6 +7,10 @@ public struct MacCaptureDeviceProvider: CaptureDeviceProvider {
         try await ScreenCaptureDeviceList().devices()
     }
 
+    public func videoInputs() async throws -> [CaptureDevice] {
+        try CameraCaptureDeviceList().devices()
+    }
+
     public func audioInputs() async throws -> [CaptureDevice] {
         try CoreAudioDeviceList().inputDevices()
     }

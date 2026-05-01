@@ -1,5 +1,5 @@
 {
-  "originHash" : "978f7789b4a5b49a18407a86b6d8fbd3d1d1360f86162c352aff1b8b9a5f4b0f",
+  "originHash" : "1adc583962a965fe9344434dda48e7992e7294753861890aadd312fea5dfef0f",
   "pins" : [
     {
       "identity" : "ansi",
@@ -16,7 +16,7 @@
       "location" : "https://github.com/leviouwendijk/Arguments.git",
       "state" : {
         "branch" : "master",
-        "revision" : "6b9397e73b39e5dbce99a4547d3084dffd1de058"
+        "revision" : "d35c47e106b42596ac86a8e2afa3e384f3f018cc"
       }
     },
     {
@@ -34,7 +34,7 @@
       "location" : "https://github.com/leviouwendijk/Primitives.git",
       "state" : {
         "branch" : "master",
-        "revision" : "c535297ac2596102167da32b910b6c8c4e17ecc9"
+        "revision" : "e112f25245dde3fcc2b87f746a7c090cbe8d2a3b"
       }
     },
     {
@@ -52,7 +52,7 @@
       "location" : "https://github.com/leviouwendijk/Terminal.git",
       "state" : {
         "branch" : "master",
-        "revision" : "96a660581c7a5e8527f62f3c573f7fce24b65014"
+        "revision" : "0a55bdc55ce07514cf9dc772edef4fa27cbdb2d6"
       }
     },
     {

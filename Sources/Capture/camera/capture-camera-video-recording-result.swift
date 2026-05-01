@@ -1,9 +1,11 @@
 import Foundation
 
-public struct CaptureSystemAudioRecordingResult: Sendable, Codable, Hashable {
+public struct CaptureCameraVideoRecordingResult: Sendable, Codable, Hashable {
     public let output: URL
+    public let camera: CaptureDevice
     public let durationSeconds: Int
-    public let sampleBufferCount: Int
+    public let frameCount: Int
+    public let video: CaptureResolvedVideoOptions
     public let startedAt: Date
     public let startedHostTimeSeconds: TimeInterval
     public let firstSampleAt: Date?
@@ -11,16 +13,20 @@ public struct CaptureSystemAudioRecordingResult: Sendable, Codable, Hashable {
 
     public init(
         output: URL,
+        camera: CaptureDevice,
         durationSeconds: Int,
-        sampleBufferCount: Int,
+        frameCount: Int,
+        video: CaptureResolvedVideoOptions,
         startedAt: Date,
         startedHostTimeSeconds: TimeInterval,
         firstSampleAt: Date?,
         firstPresentationTimeSeconds: Double?
     ) {
         self.output = output
+        self.camera = camera
         self.durationSeconds = durationSeconds
-        self.sampleBufferCount = sampleBufferCount
+        self.frameCount = frameCount
+        self.video = video
         self.startedAt = startedAt
         self.startedHostTimeSeconds = startedHostTimeSeconds
         self.firstSampleAt = firstSampleAt

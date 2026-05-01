@@ -24,6 +24,7 @@ public struct CaptureDevice: Sendable, Codable, Hashable, Identifiable {
 
     public enum Kind: String, Sendable, Codable, Hashable, CaseIterable {
         case display
+        case video_input
         case audio_input
     }
 

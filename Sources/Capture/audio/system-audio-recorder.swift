@@ -74,6 +74,7 @@ public struct ScreenCaptureSystemAudioRecorder: Sendable {
         )
 
         let startedAt = Date()
+        let startedHostTimeSeconds = CaptureClock.hostTimeSeconds()
         var streamDidStart = false
 
         do {
@@ -103,6 +104,7 @@ public struct ScreenCaptureSystemAudioRecorder: Sendable {
                 ),
                 sampleBufferCount: finishResult.sampleBufferCount,
                 startedAt: startedAt,
+                startedHostTimeSeconds: startedHostTimeSeconds,
                 firstSampleAt: finishResult.firstSampleAt,
                 firstPresentationTimeSeconds: finishResult.firstPresentationTimeSeconds
             )

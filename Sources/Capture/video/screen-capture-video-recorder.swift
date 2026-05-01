@@ -81,6 +81,7 @@ public struct ScreenCaptureVideoRecorder: Sendable {
 
         var streamDidStart = false
         let startedAt = Date()
+        let startedHostTimeSeconds = CaptureClock.hostTimeSeconds()
 
         do {
             try await stream.startCapture()
@@ -124,6 +125,7 @@ public struct ScreenCaptureVideoRecorder: Sendable {
                 video: resolvedVideo,
                 diagnostics: diagnostics,
                 startedAt: startedAt,
+                startedHostTimeSeconds: startedHostTimeSeconds,
                 firstSampleAt: streamOutput.firstCompleteSampleAt(),
                 firstPresentationTimeSeconds: streamOutput.firstCompleteFramePresentationTimeSeconds()
             )
@@ -212,6 +214,7 @@ public struct ScreenCaptureVideoRecorder: Sendable {
         )
 
         let startedAt = Date()
+        let startedHostTimeSeconds = CaptureClock.hostTimeSeconds()
         var streamDidStart = false
 
         do {
@@ -254,6 +257,7 @@ public struct ScreenCaptureVideoRecorder: Sendable {
                 video: resolvedVideo,
                 diagnostics: diagnostics,
                 startedAt: startedAt,
+                startedHostTimeSeconds: startedHostTimeSeconds,
                 firstSampleAt: streamOutput.firstCompleteSampleAt(),
                 firstPresentationTimeSeconds: streamOutput.firstCompleteFramePresentationTimeSeconds()
             )

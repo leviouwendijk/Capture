@@ -1,0 +1,240 @@
+import AVFoundation
+import CoreMedia
+import Foundation
+
+public struct CameraVideoRecorder: Sendable {
+    public init() {}
+
+    public func recordVideoUntilStopped(
+        configuration: CaptureCameraConfiguration,
+        stopSignal: CaptureStopSignal,
+        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider()
+    ) async throws -> CaptureCameraVideoRecordingResult {
+        try validateOutput(
+            configuration.output
+        )
+
+        try await ensureCameraPermission()
+
+        let resolved = try await CameraCaptureDeviceResolver(
+            provider: deviceProvider
+        ).resolve(
+            configuration: configuration
+        )
+
+        let cameraDevice = try cameraDevice(
+            matching: resolved.videoInput
+        )
+
+        let writer = try CameraVideoWriter(
+            output: configuration.output,
+            container: configuration.container,
+            video: configuration.video
+        )
+
+        let streamOutput = CameraVideoStreamOutput(
+            writer: writer
+        )
+
+        let session = AVCaptureSession()
+        let videoOutput = AVCaptureVideoDataOutput()
+
+        do {
+            try configure(
+                session: session,
+                cameraDevice: cameraDevice,
+                videoOutput: videoOutput,
+                streamOutput: streamOutput,
+                fps: configuration.video.fps
+            )
+
+            session.startRunning()
+
+            let startedAt = Date()
+            let startedHostTimeSeconds = CaptureClock.hostTimeSeconds()
+
+            await stopSignal.wait()
+
+            session.stopRunning()
+
+            let duration = Date().timeIntervalSince(
+                startedAt
+            )
+
+            let finishResult = try await writer.finish()
+
+            return CaptureCameraVideoRecordingResult(
+                output: configuration.output,
+                camera: resolved.videoInput,
+                durationSeconds: max(
+                    0,
+                    Int(
+                        duration.rounded()
+                    )
+                ),
+                frameCount: finishResult.frameCount,
+                video: finishResult.video,
+                startedAt: startedAt,
+                startedHostTimeSeconds: startedHostTimeSeconds,
+                firstSampleAt: finishResult.firstSampleAt,
+                firstPresentationTimeSeconds: finishResult.firstPresentationTimeSeconds
+            )
+        } catch {
+            if session.isRunning {
+                session.stopRunning()
+            }
+
+            writer.cancel()
+            throw error
+        }
+    }
+}
+
+private extension CameraVideoRecorder {
+    func validateOutput(
+        _ output: URL
+    ) throws {
+        let ext = output.pathExtension.lowercased()
+
+        guard ext == "mov" || ext == "mp4" else {
+            throw CaptureError.videoCapture(
+                "Camera video capture currently writes .mov or .mp4 output."
+            )
+        }
+    }
+
+    func ensureCameraPermission() async throws {
+        switch AVCaptureDevice.authorizationStatus(
+            for: .video
+        ) {
+        case .authorized:
+            return
+
+        case .notDetermined:
+            let granted = await AVCaptureDevice.requestAccess(
+                for: .video
+            )
+
+            guard granted else {
+                throw CaptureError.videoCapture(
+                    "Camera permission was not granted."
+                )
+            }
+
+        case .denied, .restricted:
+            throw CaptureError.videoCapture(
+                "Camera permission is not granted to this process. Grant it to the terminal host app, then fully quit and reopen that app."
+            )
+
+        @unknown default:
+            throw CaptureError.videoCapture(
+                "Camera permission is unavailable."
+            )
+        }
+    }
+
+    func cameraDevice(
+        matching device: CaptureDevice
+    ) throws -> AVCaptureDevice {
+        let devices = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [
+                .builtInWideAngleCamera,
+                .continuityCamera,
+                .external,
+            ],
+            mediaType: .video,
+            position: .unspecified
+        ).devices
+
+        guard let camera = devices.first(
+            where: {
+                $0.uniqueID == device.id
+                    || $0.localizedName == device.name
+            }
+        ) else {
+            throw CaptureError.deviceNotFound(
+                kind: .video_input,
+                value: device.id
+            )
+        }
+
+        return camera
+    }
+
+    func configure(
+        session: AVCaptureSession,
+        cameraDevice: AVCaptureDevice,
+        videoOutput: AVCaptureVideoDataOutput,
+        streamOutput: CameraVideoStreamOutput,
+        fps: Int
+    ) throws {
+        session.beginConfiguration()
+        defer {
+            session.commitConfiguration()
+        }
+
+        guard session.canSetSessionPreset(
+            .high
+        ) else {
+            throw CaptureError.videoCapture(
+                "Could not configure camera session preset."
+            )
+        }
+
+        session.sessionPreset = .high
+
+        let input = try AVCaptureDeviceInput(
+            device: cameraDevice
+        )
+
+        guard session.canAddInput(
+            input
+        ) else {
+            throw CaptureError.videoCapture(
+                "Could not add camera input \(cameraDevice.localizedName)."
+            )
+        }
+
+        session.addInput(
+            input
+        )
+
+        try validateRequestedFrameRate(
+            cameraDevice,
+            fps: fps
+        )
+
+        videoOutput.alwaysDiscardsLateVideoFrames = false
+        videoOutput.videoSettings = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+        ]
+
+        guard session.canAddOutput(
+            videoOutput
+        ) else {
+            throw CaptureError.videoCapture(
+                "Could not add camera video output."
+            )
+        }
+
+        session.addOutput(
+            videoOutput
+        )
+
+        videoOutput.setSampleBufferDelegate(
+            streamOutput,
+            queue: streamOutput.queue
+        )
+    }
+
+    func validateRequestedFrameRate(
+        _ device: AVCaptureDevice,
+        fps: Int
+    ) throws {
+        guard fps > 0 else {
+            throw CaptureError.invalidFrameRate(
+                fps
+            )
+        }
+    }
+}

@@ -75,6 +75,9 @@ private extension CaptureError {
         case .display:
             return "display"
 
+        case .video_input:
+            return "video input"
+
         case .audio_input:
             return "audio input"
         }
