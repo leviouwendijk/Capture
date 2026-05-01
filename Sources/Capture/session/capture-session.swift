@@ -135,8 +135,11 @@ public final class CaptureSession: Sendable {
         let videoTimelineStartHostTimeSeconds = capturedVideoResult.firstPresentationTimeSeconds
             ?? capturedVideoResult.startedHostTimeSeconds
 
+        let microphoneStartHostTimeSeconds = capturedAudioResult.firstSampleHostTimeSeconds
+            ?? capturedAudioResult.startedHostTimeSeconds
+
         let microphoneStartOffsetSeconds = normalizedTimelineOffset(
-            capturedAudioResult.startedHostTimeSeconds - videoTimelineStartHostTimeSeconds
+            microphoneStartHostTimeSeconds - videoTimelineStartHostTimeSeconds
         )
 
         let systemAudioStartOffsetSeconds = capturedSystemAudioResult.map { result in

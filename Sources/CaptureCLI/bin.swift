@@ -697,7 +697,8 @@ private extension CaptureCLI {
         )
 
         writeVideoSummary(
-            result: result
+            result: result,
+            exportDurationSeconds: nil
         )
     }
 
@@ -783,63 +784,99 @@ private extension CaptureCLI {
             output: output
         )
 
-        fputs(
-            "capture: recording camera \(cameraName ?? "default") with audio \(audioName)\n",
-            stderr
+        let provider = MacCaptureDeviceProvider()
+        let resolvedVideo = try await resolvedCameraVideoPreview(
+            configuration: configuration,
+            provider: provider
         )
 
-        let provider = MacCaptureDeviceProvider()
-        let result: CaptureCameraRecordingResult
+        try CaptureCLIStoragePreflight.ensureAvailable(
+            output: output,
+            video: resolvedVideo,
+            durationSeconds: durationSeconds,
+            mode: .camera
+        )
+
+        let timer = recordingTimer(
+            limitSeconds: durationSeconds,
+            output: output,
+            audioName: audioName,
+            systemAudioEnabled: false,
+            audioMix: audioMix,
+            video: resolvedVideo,
+            cameraName: cameraName ?? "default"
+        )
+
+        let progressRenderer = CaptureCLIProgressRenderer(
+            recordingTimer: timer,
+            output: output
+        )
 
         if let durationSeconds {
-            result = try await CameraCaptureSession(
+            let session = CameraCaptureSession(
                 configuration: configuration,
                 options: try CaptureRecordOptions(
                     durationSeconds: durationSeconds
                 ),
                 deviceProvider: provider
-            ).start()
-        } else {
-            fputs(
-                "capture: press Ctrl-C, SIGTERM, or q + return to stop\n",
-                stderr
-            )
+            ) { progress in
+                await progressRenderer.handle(
+                    progress
+                )
+            }
 
+            await timer.start()
+
+            do {
+                let result = try await session.start()
+
+                await progressRenderer.finishAfterSuccess()
+
+                writeCameraSummary(
+                    result: result,
+                    exportDurationSeconds: await progressRenderer.exportDurationSeconds()
+                )
+            } catch {
+                await progressRenderer.finishAfterError()
+                throw error
+            }
+        } else {
             let stopSignal = CaptureStopSignal()
             let listener = CaptureCLIStopListener(
                 stopSignal: stopSignal
             )
 
+            let session = CameraCaptureSession(
+                configuration: configuration,
+                deviceProvider: provider
+            ) { progress in
+                await progressRenderer.handle(
+                    progress
+                )
+            }
+
             listener.start()
+            await timer.start()
 
             do {
-                result = try await CameraCaptureSession(
-                    configuration: configuration,
-                    deviceProvider: provider
-                ).startUntilStopped(
+                let result = try await session.startUntilStopped(
                     stopSignal: stopSignal
                 )
 
                 listener.stop()
+
+                await progressRenderer.finishAfterSuccess()
+
+                writeCameraSummary(
+                    result: result,
+                    exportDurationSeconds: await progressRenderer.exportDurationSeconds()
+                )
             } catch {
                 listener.stop()
+                await progressRenderer.finishAfterError()
                 throw error
             }
         }
-
-        fputs(
-            """
-            capture: wrote camera recording \(result.output.path)
-            camera: \(result.camera.name)
-            audio: \(result.audioInput.name)
-            duration: \(result.durationSeconds)s
-            frames: \(result.videoFrameCount)
-            video: \(result.video.width)x\(result.video.height) @ \(result.video.fps) fps
-            mic offset: \(String(format: "%.3f", result.microphoneStartOffsetSeconds))s
-
-            """,
-            stderr
-        )
     }
 
     static func recordComposition(
@@ -909,10 +946,10 @@ private extension CaptureCLI {
             as: Double.self
         ) ?? 1.0
 
-        let systemGain = try invocation.value(
-            "system-gain",
-            as: Double.self
-        ) ?? 1.0
+        let systemGain = try systemGain(
+            invocation: invocation,
+            systemAudioEnabled: systemAudioEnabled
+        )
 
         let video = try CaptureVideoOptions(
             width: width,
@@ -962,53 +999,115 @@ private extension CaptureCLI {
             output: output
         )
 
-        fputs(
-            "capture: recording composed screen + camera with audio \(audioName)\n",
-            stderr
+        let provider = MacCaptureDeviceProvider()
+
+        let previewConfiguration = try CaptureConfiguration(
+            display: configuration.display,
+            video: video,
+            audio: audio,
+            systemAudio: systemAudio,
+            audioMix: audioMix,
+            container: configuration.container,
+            output: output
         )
 
-        let provider = MacCaptureDeviceProvider()
-        let result: CaptureCompositionRecordingResult
+        let resolvedVideo = try await resolvedVideoPreview(
+            configuration: previewConfiguration,
+            provider: provider
+        )
+
+        try CaptureCLIStoragePreflight.ensureAvailable(
+            output: output,
+            video: resolvedVideo,
+            durationSeconds: durationSeconds,
+            mode: .composition
+        )
+
+        let layoutDescription = try compositionLayoutDescription(
+            invocation: invocation
+        )
+
+        let timer = recordingTimer(
+            limitSeconds: durationSeconds,
+            output: output,
+            audioName: audioName,
+            systemAudioEnabled: systemAudioEnabled,
+            audioMix: audioMix,
+            video: resolvedVideo,
+            cameraName: cameraName ?? "default",
+            layoutDescription: layoutDescription
+        )
+
+        let progressRenderer = CaptureCLIProgressRenderer(
+            recordingTimer: timer,
+            output: output
+        )
 
         if let durationSeconds {
-            result = try await CaptureCompositionSession(
+            let session = CaptureCompositionSession(
                 configuration: configuration,
                 options: try CaptureRecordOptions(
                     durationSeconds: durationSeconds
                 ),
                 deviceProvider: provider
-            ).start()
-        } else {
-            fputs(
-                "capture: press Ctrl-C, SIGTERM, or q + return to stop\n",
-                stderr
-            )
+            ) { progress in
+                await progressRenderer.handle(
+                    progress
+                )
+            }
 
+            await timer.start()
+
+            do {
+                let result = try await session.start()
+
+                await progressRenderer.finishAfterSuccess()
+
+                writeCompositionSummary(
+                    result: result,
+                    exportDurationSeconds: await progressRenderer.exportDurationSeconds()
+                )
+            } catch {
+                await progressRenderer.finishAfterError()
+                throw error
+            }
+        } else {
             let stopSignal = CaptureStopSignal()
             let listener = CaptureCLIStopListener(
                 stopSignal: stopSignal
             )
 
+            let session = CaptureCompositionSession(
+                configuration: configuration,
+                deviceProvider: provider
+            ) { progress in
+                await progressRenderer.handle(
+                    progress
+                )
+            }
+
             listener.start()
+            await timer.start()
 
             do {
-                result = try await CaptureCompositionSession(
-                    configuration: configuration,
-                    deviceProvider: provider
-                ).startUntilStopped(
+                let result = try await session.startUntilStopped(
                     stopSignal: stopSignal
                 )
 
                 listener.stop()
+
+                await progressRenderer.finishAfterSuccess()
+
+                writeCompositionSummary(
+                    result: result,
+                    exportDurationSeconds: await progressRenderer.exportDurationSeconds()
+                )
             } catch {
                 listener.stop()
+                await progressRenderer.finishAfterError()
                 throw error
             }
         }
-
-        writeCompositionSummary(
-            result: result
-        )
     }
 
     static func recordingTimer(
@@ -1017,7 +1116,9 @@ private extension CaptureCLI {
         audioName: String,
         systemAudioEnabled: Bool,
         audioMix: CaptureAudioMixOptions,
-        video: CaptureResolvedVideoOptions
+        video: CaptureResolvedVideoOptions,
+        cameraName: String? = nil,
+        layoutDescription: String? = nil
     ) -> TerminalLiveStatusLine {
         TerminalLiveStatusLine(
             limitSeconds: limitSeconds.map(
@@ -1029,7 +1130,9 @@ private extension CaptureCLI {
                 systemAudioEnabled: systemAudioEnabled,
                 audioMix: audioMix,
                 video: video,
-                limitSeconds: limitSeconds
+                limitSeconds: limitSeconds,
+                cameraName: cameraName,
+                layoutDescription: layoutDescription
             )
         ) { frame in
             if let limitText = frame.limitText,
@@ -1090,22 +1193,25 @@ private extension CaptureCLI {
         ) ?? "ext-in"
 
         let systemAudioEnabled = try invocation.flag(
-            "system-audio",
-            default: false
+            "system-audio"
+        )
+
+        let micGain = try invocation.value(
+            "mic-gain",
+            as: Double.self
+        ) ?? 1.0
+
+        let systemGain = try systemGain(
+            invocation: invocation,
+            systemAudioEnabled: systemAudioEnabled
         )
 
         let audioMix = try CaptureAudioMixOptions(
             layout: audioLayout(
                 invocation: invocation
             ),
-            microphoneGain: try invocation.value(
-                "mic-gain",
-                as: Double.self
-            ) ?? 1.0,
-            systemGain: try invocation.value(
-                "system-gain",
-                as: Double.self
-            ) ?? 1.0
+            microphoneGain: micGain,
+            systemGain: systemGain
         )
 
         let cursor = try invocation.flag(
@@ -1149,6 +1255,13 @@ private extension CaptureCLI {
             provider: provider
         )
 
+        try CaptureCLIStoragePreflight.ensureAvailable(
+            output: output,
+            video: resolvedVideo,
+            durationSeconds: durationSeconds,
+            mode: .record
+        )
+
         if let durationSeconds {
             let timer = recordingTimer(
                 limitSeconds: durationSeconds,
@@ -1184,7 +1297,8 @@ private extension CaptureCLI {
                 await progressRenderer.finishAfterSuccess()
 
                 writeRecordingSummary(
-                    result: result
+                    result: result,
+                    exportDurationSeconds: await progressRenderer.exportDurationSeconds()
                 )
             } catch {
                 await progressRenderer.finishAfterError()
@@ -1232,13 +1346,92 @@ private extension CaptureCLI {
                 await progressRenderer.finishAfterSuccess()
 
                 writeRecordingSummary(
-                    result: result
+                    result: result,
+                    exportDurationSeconds: await progressRenderer.exportDurationSeconds()
                 )
             } catch {
                 listener.stop()
                 await progressRenderer.finishAfterError()
                 throw error
             }
+        }
+    }
+
+    static func resolvedCameraVideoPreview(
+        configuration: CaptureCameraConfiguration,
+        provider: MacCaptureDeviceProvider
+    ) async throws -> CaptureResolvedVideoOptions {
+        let resolved = try await CameraCaptureDeviceResolver(
+            provider: provider
+        ).resolve(
+            configuration: configuration
+        )
+
+        let size = resolved.videoInput.size ?? CaptureVideoSize(
+            width: 1920,
+            height: 1080
+        )
+
+        let bitrate = configuration.video.bitrate
+            ?? configuration.video.quality.recommendedBitrate(
+                width: size.width,
+                height: size.height,
+                fps: configuration.video.fps
+            )
+
+        return try CaptureResolvedVideoOptions(
+            width: size.width,
+            height: size.height,
+            fps: configuration.video.fps,
+            cursor: false,
+            codec: configuration.video.codec,
+            quality: configuration.video.quality,
+            bitrate: bitrate
+        )
+    }
+
+    static func compositionLayoutDescription(
+        invocation: ParsedInvocation
+    ) throws -> String {
+        let layout = try invocation.value(
+            "layout",
+            as: String.self
+        ) ?? "overlay"
+
+        switch layout {
+        case "overlay":
+            let source = try invocation.value(
+                "overlay-source",
+                as: String.self
+            ) ?? CaptureCompositionSource.camera.rawValue
+
+            let width = try invocation.value(
+                "overlay-width",
+                as: Double.self
+            ) ?? 0.24
+
+            let x = try invocation.value(
+                "overlay-x",
+                as: String.self
+            ) ?? CaptureHorizontalPlacement.right.rawValue
+
+            let y = try invocation.value(
+                "overlay-y",
+                as: String.self
+            ) ?? CaptureVerticalPlacement.bottom.rawValue
+
+            return "overlay source=\(source) width=\(String(format: "%.2f", width)) x=\(x) y=\(y)"
+
+        case "side-by-side":
+            let gap = try invocation.value(
+                "gap",
+                as: Int.self
+            ) ?? 24
+
+            return "side-by-side gap=\(gap)"
+
+        default:
+            return layout
         }
     }
 
@@ -1281,6 +1474,28 @@ private extension CaptureCLI {
         }
 
         return layout
+    }
+
+    static func systemGain(
+        invocation: ParsedInvocation,
+        systemAudioEnabled: Bool
+    ) throws -> Double {
+        let value = try invocation.value(
+            "system-gain",
+            as: Double.self
+        )
+
+        guard systemAudioEnabled || value == nil || value == 1.0 else {
+            throw CaptureError.audioCapture(
+                "Cannot use --system-gain without --system-audio. Add --system-audio or remove --system-gain."
+            )
+        }
+
+        guard systemAudioEnabled else {
+            return 1.0
+        }
+
+        return value ?? 1.0
     }
 
     static func videoQuality(
@@ -1436,26 +1651,6 @@ private extension CaptureCLI {
         }
 
         return layout
-    }
-
-    static func writeCompositionSummary(
-        result: CaptureCompositionRecordingResult
-    ) {
-        fputs(
-            """
-            capture: wrote composed recording \(result.output.path)
-            duration: \(result.durationSeconds)s
-            video: \(result.video.width)x\(result.video.height) @ \(result.video.fps) fps
-            screen frames: \(result.screenFrameCount)
-            camera frames: \(result.cameraFrameCount)
-            audio tracks: \(result.audioTrackCount)
-            audio layout: \(result.audioLayout.rawValue)
-            mic offset: \(String(format: "%.3f", result.microphoneStartOffsetSeconds))s
-            system offset: \(result.systemAudioStartOffsetSeconds.map { String(format: "%.3f", $0) + "s" } ?? "none")
-
-            """,
-            stderr
-        )
     }
 
     static func container(

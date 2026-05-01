@@ -7,6 +7,8 @@ internal actor CaptureCLIProgressRenderer {
     private let output: URL
     private var recordingTimerStopped = false
     private var exportStatusLine: TerminalLiveStatusLine?
+    private var exportStartedAt: Date?
+    private var exportFinishedAt: Date?
 
     init(
         recordingTimer: TerminalLiveStatusLine,
@@ -26,11 +28,16 @@ internal actor CaptureCLIProgressRenderer {
             )
 
         case .exportStarted(let mode):
+            exportStartedAt = Date()
+            exportFinishedAt = nil
+
             await startExportStatusLineIfNeeded(
                 mode: mode
             )
 
         case .exportFinished(let mode):
+            exportFinishedAt = Date()
+
             await stopExportStatusLineIfNeeded(
                 mode: mode,
                 finalLine: "export: exported \(output.path)"
@@ -65,6 +72,24 @@ internal actor CaptureCLIProgressRenderer {
             )
             self.exportStatusLine = nil
         }
+    }
+
+    func exportDurationSeconds() -> TimeInterval? {
+        guard let exportStartedAt,
+              let exportFinishedAt else {
+            return nil
+        }
+
+        let duration = exportFinishedAt.timeIntervalSince(
+            exportStartedAt
+        )
+
+        guard duration.isFinite,
+              duration >= 0 else {
+            return nil
+        }
+
+        return duration
     }
 }
 
@@ -109,7 +134,7 @@ private extension CaptureCLIProgressRenderer {
 
         let statusLine = TerminalLiveStatusLine(
             leadingLines: [
-                "export: rendering audio",
+                "export: rendering",
             ]
         ) { frame in
             let index = Int(

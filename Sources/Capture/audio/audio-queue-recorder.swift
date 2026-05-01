@@ -1,4 +1,5 @@
 import AudioToolbox
+import CoreAudio
 import Foundation
 
 internal final class AudioQueueRecorder: @unchecked Sendable {
@@ -13,6 +14,7 @@ internal final class AudioQueueRecorder: @unchecked Sendable {
     private var packetIndex: Int64 = 0
     private var isRunning = false
     private var callbackStatus: OSStatus = noErr
+    private var firstInputHostTimeSeconds: TimeInterval?
 
     init(
         device: CaptureDevice,
@@ -86,6 +88,14 @@ internal final class AudioQueueRecorder: @unchecked Sendable {
             )
         }
     }
+
+    func firstSampleHostTimeSeconds() -> TimeInterval? {
+        stateLock.lock()
+        let value = firstInputHostTimeSeconds
+        stateLock.unlock()
+
+        return value
+    }
 }
 
 private extension AudioQueueRecorder {
@@ -93,7 +103,7 @@ private extension AudioQueueRecorder {
         userData,
         queue,
         buffer,
-        _,
+        startTime,
         packetCount,
         packetDescriptions in
 
@@ -110,6 +120,9 @@ private extension AudioQueueRecorder {
         recorder.handleInput(
             queue: queue,
             buffer: buffer,
+            inputHostTimeSeconds: AudioQueueRecorder.audioHostTimeSeconds(
+                from: startTime
+            ),
             packetCount: packetCount,
             packetDescriptions: packetDescriptions
         )
@@ -138,6 +151,27 @@ private extension AudioQueueRecorder {
             mBitsPerChannel: 16,
             mReserved: 0
         )
+    }
+
+    static func audioHostTimeSeconds(
+        from timestamp: UnsafePointer<AudioTimeStamp>
+    ) -> TimeInterval? {
+        let value = timestamp.pointee
+        let flags = value.mFlags.rawValue
+        let hostTimeValidFlag: UInt32 = 1 << 1
+
+        guard (flags & hostTimeValidFlag) != 0,
+              value.mHostTime > 0 else {
+            return nil
+        }
+
+        let nanoseconds = AudioConvertHostTimeToNanos(
+            value.mHostTime
+        )
+
+        return TimeInterval(
+            nanoseconds
+        ) / 1_000_000_000
     }
 
     func prepareOutputDirectory() throws {
@@ -281,6 +315,7 @@ private extension AudioQueueRecorder {
     func handleInput(
         queue: AudioQueueRef,
         buffer: AudioQueueBufferRef,
+        inputHostTimeSeconds: TimeInterval?,
         packetCount: UInt32,
         packetDescriptions: UnsafePointer<AudioStreamPacketDescription>?
     ) {
@@ -298,6 +333,12 @@ private extension AudioQueueRecorder {
         if packets == 0,
            format.mBytesPerPacket > 0 {
             packets = buffer.pointee.mAudioDataByteSize / format.mBytesPerPacket
+        }
+
+        if firstInputHostTimeSeconds == nil,
+           packets > 0,
+           let inputHostTimeSeconds {
+            firstInputHostTimeSeconds = inputHostTimeSeconds
         }
 
         let status = AudioFileWritePackets(

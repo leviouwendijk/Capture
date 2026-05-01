@@ -49,7 +49,8 @@ public struct CoreAudioRecorder: Sendable {
             device: resolved.audioInput,
             durationSeconds: options.durationSeconds,
             startedAt: startedAt,
-            startedHostTimeSeconds: startedHostTimeSeconds
+            startedHostTimeSeconds: startedHostTimeSeconds,
+            firstSampleHostTimeSeconds: recorder.firstSampleHostTimeSeconds()
         )
     }
 
@@ -103,7 +104,8 @@ public struct CoreAudioRecorder: Sendable {
                 )
             ),
             startedAt: startedAt,
-            startedHostTimeSeconds: startedHostTimeSeconds
+            startedHostTimeSeconds: startedHostTimeSeconds,
+            firstSampleHostTimeSeconds: recorder.firstSampleHostTimeSeconds()
         )
     }
 }

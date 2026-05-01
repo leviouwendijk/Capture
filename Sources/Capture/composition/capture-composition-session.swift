@@ -4,15 +4,18 @@ public final class CaptureCompositionSession: Sendable {
     public let configuration: CaptureCompositionConfiguration
     public let options: CaptureRecordOptions
     public let deviceProvider: any CaptureDeviceProvider
+    public let progress: CaptureSessionProgressHandler?
 
     public init(
         configuration: CaptureCompositionConfiguration,
         options: CaptureRecordOptions = .standard,
-        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider()
+        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
+        progress: CaptureSessionProgressHandler? = nil
     ) {
         self.configuration = configuration
         self.options = options
         self.deviceProvider = deviceProvider
+        self.progress = progress
     }
 
     @discardableResult
@@ -136,6 +139,21 @@ public final class CaptureCompositionSession: Sendable {
         let capturedAudioResult = try await audioResult
         let capturedSystemAudioResult = try await systemAudioResult
 
+        let capturedDurationSeconds = [
+            capturedScreenVideoResult.durationSeconds,
+            capturedCameraVideoResult.durationSeconds,
+            capturedAudioResult.durationSeconds,
+            capturedSystemAudioResult?.durationSeconds ?? 0,
+        ].max() ?? 0
+
+        await report(
+            .recordingStopped(
+                durationSeconds: TimeInterval(
+                    capturedDurationSeconds
+                )
+            )
+        )
+
         let screenVideoStartHostTimeSeconds = capturedScreenVideoResult.firstPresentationTimeSeconds
             ?? capturedScreenVideoResult.startedHostTimeSeconds
         let cameraVideoStartHostTimeSeconds = capturedCameraVideoResult.firstPresentationTimeSeconds
@@ -154,6 +172,12 @@ public final class CaptureCompositionSession: Sendable {
 
         let cameraVideoStartOffsetSeconds = normalizedTimelineOffset(
             cameraVideoStartHostTimeSeconds - videoTimelineStartHostTimeSeconds
+        )
+
+        await report(
+            .exportStarted(
+                mode: .rendering
+            )
         )
 
         let composedVideoResult = try await CaptureCompositionVideoRenderer().render(
@@ -175,8 +199,11 @@ public final class CaptureCompositionSession: Sendable {
             container: .mov
         )
 
+        let microphoneStartHostTimeSeconds = capturedAudioResult.firstSampleHostTimeSeconds
+            ?? capturedAudioResult.startedHostTimeSeconds
+
         let microphoneStartOffsetSeconds = normalizedTimelineOffset(
-            capturedAudioResult.startedHostTimeSeconds - videoTimelineStartHostTimeSeconds
+            microphoneStartHostTimeSeconds - videoTimelineStartHostTimeSeconds
         )
 
         let systemAudioStartOffsetSeconds = capturedSystemAudioResult.map { result in
@@ -216,6 +243,12 @@ public final class CaptureCompositionSession: Sendable {
             container: configuration.container
         )
 
+        await report(
+            .exportFinished(
+                mode: .rendering
+            )
+        )
+
         return CaptureCompositionRecordingResult(
             output: configuration.output,
             durationSeconds: composedVideoResult.durationSeconds,
@@ -237,6 +270,18 @@ public final class CaptureCompositionSession: Sendable {
 }
 
 private extension CaptureCompositionSession {
+    func report(
+        _ event: CaptureSessionProgress
+    ) async {
+        guard let progress else {
+            return
+        }
+
+        await progress(
+            event
+        )
+    }
+
     func earliestHostTime(
         _ values: [TimeInterval]
     ) -> TimeInterval {

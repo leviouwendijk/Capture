@@ -4,15 +4,18 @@ public final class CameraCaptureSession: Sendable {
     public let configuration: CaptureCameraConfiguration
     public let options: CaptureRecordOptions
     public let deviceProvider: any CaptureDeviceProvider
+    public let progress: CaptureSessionProgressHandler?
 
     public init(
         configuration: CaptureCameraConfiguration,
         options: CaptureRecordOptions = .standard,
-        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider()
+        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
+        progress: CaptureSessionProgressHandler? = nil
     ) {
         self.configuration = configuration
         self.options = options
         self.deviceProvider = deviceProvider
+        self.progress = progress
     }
 
     @discardableResult
@@ -90,11 +93,27 @@ public final class CameraCaptureSession: Sendable {
         let capturedVideoResult = try await videoResult
         let capturedAudioResult = try await audioResult
 
+        let capturedDurationSeconds = max(
+            capturedVideoResult.durationSeconds,
+            capturedAudioResult.durationSeconds
+        )
+
+        await report(
+            .recordingStopped(
+                durationSeconds: TimeInterval(
+                    capturedDurationSeconds
+                )
+            )
+        )
+
         let videoTimelineStartHostTimeSeconds = capturedVideoResult.firstPresentationTimeSeconds
             ?? capturedVideoResult.startedHostTimeSeconds
 
+        let microphoneStartHostTimeSeconds = capturedAudioResult.firstSampleHostTimeSeconds
+            ?? capturedAudioResult.startedHostTimeSeconds
+
         let microphoneStartOffsetSeconds = normalizedTimelineOffset(
-            capturedAudioResult.startedHostTimeSeconds - videoTimelineStartHostTimeSeconds
+            microphoneStartHostTimeSeconds - videoTimelineStartHostTimeSeconds
         )
 
         let audioInputs = [
@@ -106,6 +125,16 @@ public final class CameraCaptureSession: Sendable {
             ),
         ]
 
+        let exportMode: CaptureExportMode = configuration.audioMix.requiresAudioRendering
+            ? .rendering
+            : .passthrough
+
+        await report(
+            .exportStarted(
+                mode: exportMode
+            )
+        )
+
         try await CaptureAssetMuxer().mux(
             video: videoOutput,
             audio: audioInputs,
@@ -114,12 +143,15 @@ public final class CameraCaptureSession: Sendable {
             container: configuration.container
         )
 
+        await report(
+            .exportFinished(
+                mode: exportMode
+            )
+        )
+
         return CaptureCameraRecordingResult(
             output: configuration.output,
-            durationSeconds: max(
-                capturedVideoResult.durationSeconds,
-                capturedAudioResult.durationSeconds
-            ),
+            durationSeconds: capturedDurationSeconds,
             videoFrameCount: capturedVideoResult.frameCount,
             video: capturedVideoResult.video,
             camera: capturedVideoResult.camera,
@@ -132,6 +164,18 @@ public final class CameraCaptureSession: Sendable {
 }
 
 private extension CameraCaptureSession {
+    func report(
+        _ event: CaptureSessionProgress
+    ) async {
+        guard let progress else {
+            return
+        }
+
+        await progress(
+            event
+        )
+    }
+
     func normalizedTimelineOffset(
         _ offset: TimeInterval
     ) -> TimeInterval {

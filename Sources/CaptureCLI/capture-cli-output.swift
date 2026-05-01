@@ -18,7 +18,9 @@ extension CaptureCLI {
         systemAudioEnabled: Bool,
         audioMix: CaptureAudioMixOptions,
         video: CaptureResolvedVideoOptions,
-        limitSeconds: Int?
+        limitSeconds: Int?,
+        cameraName: String? = nil,
+        layoutDescription: String? = nil
     ) -> [String] {
         let mode: String
         let stop: String
@@ -37,6 +39,24 @@ extension CaptureCLI {
                 output.path
             ),
         ]
+
+        if let cameraName {
+            fields.append(
+                .init(
+                    "camera",
+                    cameraName
+                )
+            )
+        }
+
+        if let layoutDescription {
+            fields.append(
+                .init(
+                    "layout",
+                    layoutDescription
+                )
+            )
+        }
 
         if let audioName {
             fields.append(
@@ -107,17 +127,77 @@ extension CaptureCLI {
     }
 
     static func writeVideoSummary(
-        result: CaptureVideoRecordingResult
+        result: CaptureVideoRecordingResult,
+        exportDurationSeconds: TimeInterval? = nil
     ) {
+        var fields = videoSummaryFields(
+            output: result.output,
+            durationSeconds: result.durationSeconds,
+            video: result.video,
+            diagnostics: result.diagnostics
+        )
+
+        fields.append(
+            contentsOf: outputMetadataFields(
+                output: result.output,
+                exportDurationSeconds: exportDurationSeconds
+            )
+        )
+
         writeBlock(
             TerminalBlock(
                 title: "capture: wrote video",
-                fields: videoSummaryFields(
-                    output: result.output,
-                    durationSeconds: result.durationSeconds,
-                    video: result.video,
-                    diagnostics: result.diagnostics
-                ),
+                fields: fields,
+                theme: .agentic,
+                layout: captureOutputLayout
+            )
+        )
+    }
+
+    static func writeCameraSummary(
+        result: CaptureCameraRecordingResult,
+        exportDurationSeconds: TimeInterval? = nil
+    ) {
+        var fields = cameraSummaryFields(
+            result: result
+        )
+
+        fields.append(
+            contentsOf: outputMetadataFields(
+                output: result.output,
+                exportDurationSeconds: exportDurationSeconds
+            )
+        )
+
+        writeBlock(
+            TerminalBlock(
+                title: "capture: wrote camera recording",
+                fields: fields,
+                theme: .agentic,
+                layout: captureOutputLayout
+            )
+        )
+    }
+
+    static func writeCompositionSummary(
+        result: CaptureCompositionRecordingResult,
+        exportDurationSeconds: TimeInterval? = nil
+    ) {
+        var fields = compositionSummaryFields(
+            result: result
+        )
+
+        fields.append(
+            contentsOf: outputMetadataFields(
+                output: result.output,
+                exportDurationSeconds: exportDurationSeconds
+            )
+        )
+
+        writeBlock(
+            TerminalBlock(
+                title: "capture: wrote composed recording",
+                fields: fields,
                 theme: .agentic,
                 layout: captureOutputLayout
             )
@@ -125,7 +205,8 @@ extension CaptureCLI {
     }
 
     static func writeRecordingSummary(
-        result: CaptureRecordingResult
+        result: CaptureRecordingResult,
+        exportDurationSeconds: TimeInterval? = nil
     ) {
         var fields = videoSummaryFields(
             output: result.output,
@@ -189,6 +270,13 @@ extension CaptureCLI {
                 at: 8
             )
         }
+
+        fields.append(
+            contentsOf: outputMetadataFields(
+                output: result.output,
+                exportDurationSeconds: exportDurationSeconds
+            )
+        )
 
         writeBlock(
             TerminalBlock(
@@ -317,6 +405,150 @@ private extension CaptureCLI {
                 )
             ),
         ]
+    }
+
+    static func cameraSummaryFields(
+        result: CaptureCameraRecordingResult
+    ) -> [TerminalField] {
+        [
+            .init(
+                "output",
+                result.output.path
+            ),
+            .init(
+                "camera",
+                result.camera.name
+            ),
+            .init(
+                "mic audio",
+                result.audioInput.name
+            ),
+            .init(
+                "duration",
+                TerminalDurationFormatter.format(
+                    TimeInterval(
+                        result.durationSeconds
+                    )
+                )
+            ),
+            .init(
+                "resolution",
+                "\(result.video.width)x\(result.video.height)"
+            ),
+            .init(
+                "fps",
+                "\(result.video.fps)"
+            ),
+            .init(
+                "quality",
+                result.video.quality.rawValue
+            ),
+            .init(
+                "bitrate",
+                bitrateDescription(
+                    result.video.bitrate
+                )
+            ),
+            .init(
+                "frames",
+                "\(result.videoFrameCount)"
+            ),
+            .init(
+                "audio tracks",
+                "\(result.audioTrackCount)"
+            ),
+            .init(
+                "mic gain",
+                gainDescription(
+                    result.microphoneGain
+                )
+            ),
+            .init(
+                "audio offsets",
+                "mic=\(syncOffsetDescription(result.microphoneStartOffsetSeconds))"
+            ),
+        ]
+    }
+
+    static func compositionSummaryFields(
+        result: CaptureCompositionRecordingResult
+    ) -> [TerminalField] {
+        [
+            .init(
+                "output",
+                result.output.path
+            ),
+            .init(
+                "duration",
+                TerminalDurationFormatter.format(
+                    TimeInterval(
+                        result.durationSeconds
+                    )
+                )
+            ),
+            .init(
+                "resolution",
+                "\(result.video.width)x\(result.video.height)"
+            ),
+            .init(
+                "fps",
+                "\(result.video.fps)"
+            ),
+            .init(
+                "quality",
+                result.video.quality.rawValue
+            ),
+            .init(
+                "bitrate",
+                bitrateDescription(
+                    result.video.bitrate
+                )
+            ),
+            .init(
+                "screen frames",
+                "\(result.screenFrameCount)"
+            ),
+            .init(
+                "camera frames",
+                "\(result.cameraFrameCount)"
+            ),
+            .init(
+                "audio tracks",
+                "\(result.audioTrackCount)"
+            ),
+            .init(
+                "audio layout",
+                result.audioLayout.rawValue
+            ),
+            .init(
+                "mic gain",
+                gainDescription(
+                    result.microphoneGain
+                )
+            ),
+            .init(
+                "system gain",
+                gainDescription(
+                    result.systemGain
+                )
+            ),
+            .init(
+                "audio offsets",
+                compositionAudioOffsetDescription(
+                    result
+                )
+            ),
+        ]
+    }
+
+    static func compositionAudioOffsetDescription(
+        _ result: CaptureCompositionRecordingResult
+    ) -> String {
+        let systemOffset = result.systemAudioStartOffsetSeconds
+            .map(syncOffsetDescription)
+            ?? "none"
+
+        return "mic=\(syncOffsetDescription(result.microphoneStartOffsetSeconds)) system=\(systemOffset)"
     }
 
     static func sourceSampleDescription(
@@ -485,6 +717,92 @@ private extension CaptureCLI {
         }
 
         return "\(bitrate) bps"
+    }
+
+    static func outputMetadataFields(
+        output: URL,
+        exportDurationSeconds: TimeInterval?
+    ) -> [TerminalField] {
+        let byteCount = outputByteCount(
+            output
+        )
+
+        var fields: [TerminalField] = []
+
+        if let exportDurationSeconds {
+            fields.append(
+                .init(
+                    "export time",
+                    TerminalDurationFormatter.format(
+                        exportDurationSeconds
+                    )
+                )
+            )
+        }
+
+        fields.append(
+            .init(
+                "file size",
+                fileSizeDescription(
+                    byteCount
+                )
+            )
+        )
+
+        fields.append(
+            .init(
+                "bytes written",
+                byteCountDescription(
+                    byteCount
+                )
+            )
+        )
+
+        return fields
+    }
+
+    static func outputByteCount(
+        _ output: URL
+    ) -> Int64? {
+        guard let attributes = try? FileManager.default.attributesOfItem(
+            atPath: output.path
+        ),
+        let size = attributes[.size] as? NSNumber else {
+            return nil
+        }
+
+        return size.int64Value
+    }
+
+    static func fileSizeDescription(
+        _ byteCount: Int64?
+    ) -> String {
+        guard let byteCount else {
+            return "unknown"
+        }
+
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [
+            .useKB,
+            .useMB,
+            .useGB,
+        ]
+        formatter.countStyle = .file
+        formatter.includesActualByteCount = false
+
+        return formatter.string(
+            fromByteCount: byteCount
+        )
+    }
+
+    static func byteCountDescription(
+        _ byteCount: Int64?
+    ) -> String {
+        guard let byteCount else {
+            return "unknown"
+        }
+
+        return "\(byteCount)"
     }
 
     static func renderedLines(
