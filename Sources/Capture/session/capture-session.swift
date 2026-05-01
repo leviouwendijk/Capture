@@ -40,35 +40,16 @@ public final class CaptureSession: Sendable {
     public func startUntilStopped(
         stopSignal: CaptureStopSignal
     ) async throws -> CaptureRecordingResult {
-        let workingDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent(
-                "capture-\(UUID().uuidString)",
-                isDirectory: true
-            )
-
-        try FileManager.default.createDirectory(
-            at: workingDirectory,
-            withIntermediateDirectories: true
-        )
-
-        var shouldRemoveWorkingDirectory = false
-
-        defer {
-            if shouldRemoveWorkingDirectory {
-                try? FileManager.default.removeItem(
-                    at: workingDirectory
-                )
-            }
-        }
-
-        do {
-            let videoOutput = workingDirectory.appendingPathComponent(
+        try await CaptureRecordingInstance.execute.attempt(
+            prefix: "capture"
+        ) { workdir in
+            let videoOutput = workdir.appendingPathComponent(
                 "video.mov"
             )
-            let audioOutput = workingDirectory.appendingPathComponent(
+            let audioOutput = workdir.appendingPathComponent(
                 "audio.wav"
             )
-            let systemAudioOutput = workingDirectory.appendingPathComponent(
+            let systemAudioOutput = workdir.appendingPathComponent(
                 "system-audio.m4a"
             )
 
@@ -200,8 +181,6 @@ public final class CaptureSession: Sendable {
                 )
             )
 
-            shouldRemoveWorkingDirectory = true
-
             return CaptureRecordingResult(
                 output: configuration.output,
                 durationSeconds: capturedDurationSeconds,
@@ -219,11 +198,6 @@ public final class CaptureSession: Sendable {
                 microphoneStartOffsetSeconds: microphoneStartOffsetSeconds,
                 systemAudioStartOffsetSeconds: systemAudioStartOffsetSeconds,
                 systemAudioSampleBufferCount: capturedSystemAudioResult?.sampleBufferCount
-            )
-        } catch {
-            throw CapturePartialRecordingError(
-                workingDirectory: workingDirectory,
-                underlyingError: error
             )
         }
     }

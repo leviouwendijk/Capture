@@ -39,41 +39,22 @@ public final class CaptureCompositionSession: Sendable {
     public func startUntilStopped(
         stopSignal: CaptureStopSignal
     ) async throws -> CaptureCompositionRecordingResult {
-        let workingDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent(
-                "capture-composition-\(UUID().uuidString)",
-                isDirectory: true
-            )
-
-        try FileManager.default.createDirectory(
-            at: workingDirectory,
-            withIntermediateDirectories: true
-        )
-
-        var shouldRemoveWorkingDirectory = false
-
-        defer {
-            if shouldRemoveWorkingDirectory {
-                try? FileManager.default.removeItem(
-                    at: workingDirectory
-                )
-            }
-        }
-
-        do {
-            let screenVideoOutput = workingDirectory.appendingPathComponent(
+        try await CaptureRecordingInstance.execute.attempt(
+            prefix: "capture-composition"
+        ) { workdir in
+            let screenVideoOutput = workdir.appendingPathComponent(
                 "screen-video.mov"
             )
-            let cameraVideoOutput = workingDirectory.appendingPathComponent(
+            let cameraVideoOutput = workdir.appendingPathComponent(
                 "camera-video.mov"
             )
-            let composedVideoOutput = workingDirectory.appendingPathComponent(
+            let composedVideoOutput = workdir.appendingPathComponent(
                 "composed-video.mov"
             )
-            let audioOutput = workingDirectory.appendingPathComponent(
+            let audioOutput = workdir.appendingPathComponent(
                 "audio.wav"
             )
-            let systemAudioOutput = workingDirectory.appendingPathComponent(
+            let systemAudioOutput = workdir.appendingPathComponent(
                 "system-audio.m4a"
             )
 
@@ -254,8 +235,6 @@ public final class CaptureCompositionSession: Sendable {
                 )
             )
 
-            shouldRemoveWorkingDirectory = true
-
             return CaptureCompositionRecordingResult(
                 output: configuration.output,
                 durationSeconds: composedVideoResult.durationSeconds,
@@ -272,11 +251,6 @@ public final class CaptureCompositionSession: Sendable {
                 systemGain: configuration.audioMix.systemGain,
                 microphoneStartOffsetSeconds: microphoneStartOffsetSeconds,
                 systemAudioStartOffsetSeconds: systemAudioStartOffsetSeconds
-            )
-        } catch {
-            throw CapturePartialRecordingError(
-                workingDirectory: workingDirectory,
-                underlyingError: error
             )
         }
     }

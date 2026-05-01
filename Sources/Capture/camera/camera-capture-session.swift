@@ -39,32 +39,13 @@ public final class CameraCaptureSession: Sendable {
     public func startUntilStopped(
         stopSignal: CaptureStopSignal
     ) async throws -> CaptureCameraRecordingResult {
-        let workingDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent(
-                "capture-camera-\(UUID().uuidString)",
-                isDirectory: true
-            )
-
-        try FileManager.default.createDirectory(
-            at: workingDirectory,
-            withIntermediateDirectories: true
-        )
-
-        var shouldRemoveWorkingDirectory = false
-
-        defer {
-            if shouldRemoveWorkingDirectory {
-                try? FileManager.default.removeItem(
-                    at: workingDirectory
-                )
-            }
-        }
-
-        do {
-            let videoOutput = workingDirectory.appendingPathComponent(
+        try await CaptureRecordingInstance.execute.attempt(
+            prefix: "capture-camera"
+        ) { workdir in
+            let videoOutput = workdir.appendingPathComponent(
                 "camera-video.mov"
             )
-            let audioOutput = workingDirectory.appendingPathComponent(
+            let audioOutput = workdir.appendingPathComponent(
                 "audio.wav"
             )
 
@@ -154,8 +135,6 @@ public final class CameraCaptureSession: Sendable {
                 )
             )
 
-            shouldRemoveWorkingDirectory = true
-
             return CaptureCameraRecordingResult(
                 output: configuration.output,
                 durationSeconds: capturedDurationSeconds,
@@ -166,11 +145,6 @@ public final class CameraCaptureSession: Sendable {
                 audioTrackCount: configuration.audioMix.requiresAudioRendering ? 1 : 1,
                 microphoneGain: configuration.audioMix.microphoneGain,
                 microphoneStartOffsetSeconds: microphoneStartOffsetSeconds
-            )
-        } catch {
-            throw CapturePartialRecordingError(
-                workingDirectory: workingDirectory,
-                underlyingError: error
             )
         }
     }
