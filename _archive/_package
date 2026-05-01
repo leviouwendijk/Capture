@@ -39,6 +39,23 @@ let package = Package(
                 .product(name: "Arguments", package: "Arguments"),
             ],
             path: "Sources/CaptureCLI",
+            exclude: [
+                "info.plist"
+            ],
+            linkerSettings: [
+                .unsafeFlags(
+                    [
+                        "-Xlinker",
+                        "-sectcreate",
+                        "-Xlinker",
+                        "__TEXT",
+                        "-Xlinker",
+                        "__info_plist",
+                        "-Xlinker",
+                        "Sources/CaptureCLI/info.plist",
+                    ]
+                ),
+            ]
         ),
         .executableTarget(
             name: "CaptureTestFlows",

@@ -14,6 +14,7 @@ enum CaptureCLI {
                 )
             )
         } catch {
+            // await writeError
             writeError(
                 error
             )
@@ -1711,6 +1712,33 @@ internal extension CaptureCLI {
             stderr
         )
     }
+    // static func writeError(
+    //     _ error: Error
+    // ) async {
+    //     if let partialError = error as? CapturePartialRecordingError {
+    //         await CaptureCLINotifier.standard.partialRecordingRetained(
+    //             partialError
+    //         )
+
+    //         fputs(
+    //             partialRecordingErrorMessage(
+    //                 partialError
+    //             ),
+    //             stderr
+    //         )
+
+    //         return
+    //     }
+
+    //     await CaptureCLINotifier.standard.recordingFailed(
+    //         error
+    //     )
+
+    //     fputs(
+    //         "capture: \(error.localizedDescription)\n",
+    //         stderr
+    //     )
+    // }
 
     static func partialRecordingErrorMessage(
         _ error: CapturePartialRecordingError
