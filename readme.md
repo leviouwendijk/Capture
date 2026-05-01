@@ -148,3 +148,6 @@ I tried doing this with `ffmpeg`, but it caused audio underruns I could not (and
 * [ ] multi-input support (audio, screens)
 * [ ] multi-ouput rendering (summing, gain, routing (DSL?))
 * [ ] prepending sine wave in recording, video flicker (synchronization)
+* [ ] live input gain modification
+* [ ] live metering
+* [ ] recording failure as system notifications
