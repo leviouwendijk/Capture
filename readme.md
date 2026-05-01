@@ -150,4 +150,6 @@ I tried doing this with `ffmpeg`, but it caused audio underruns I could not (and
 * [ ] prepending sine wave in recording, video flicker (synchronization)
 * [ ] live input gain modification
 * [ ] live metering
-* [ ] recording failure as system notifications
+* [ ] loss-less failure behavior
+* [ ] tempdir override (workspace setting for enough tempdir storage)
+* [x] recording failure as system notifications (basic osascript version)
