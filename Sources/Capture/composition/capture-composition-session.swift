@@ -91,24 +91,17 @@ public final class CaptureCompositionSession: Sendable {
                 output: audioOutput
             )
 
-            let systemAudioConfiguration = try CaptureConfiguration(
-                display: configuration.display,
-                video: configuration.video,
-                audio: configuration.audio,
-                systemAudio: configuration.systemAudio,
-                audioMix: configuration.audioMix,
-                container: .mov,
-                output: systemAudioOutput
-            )
-
             await report(
                 .recordingStarted(
                     startedAt: Date()
                 )
             )
 
-            async let screenVideoResult = ScreenCaptureVideoRecorder().recordVideoUntilStopped(
+            async let screenMediaResult = ScreenCaptureMediaRecorder().recordMediaUntilStopped(
                 configuration: screenVideoConfiguration,
+                systemAudioOutput: configuration.systemAudio.enabled
+                    ? systemAudioOutput
+                    : nil,
                 stopSignal: stopSignal,
                 deviceProvider: deviceProvider
             )
@@ -125,15 +118,11 @@ public final class CaptureCompositionSession: Sendable {
                 deviceProvider: deviceProvider
             )
 
-            async let systemAudioResult = recordSystemAudioIfNeeded(
-                configuration: systemAudioConfiguration,
-                stopSignal: stopSignal
-            )
-
-            let capturedScreenVideoResult = try await screenVideoResult
+            let capturedScreenMediaResult = try await screenMediaResult
+            let capturedScreenVideoResult = capturedScreenMediaResult.video
             let capturedCameraVideoResult = try await cameraVideoResult
             let capturedAudioResult = try await audioResult
-            let capturedSystemAudioResult = try await systemAudioResult
+            let capturedSystemAudioResult = capturedScreenMediaResult.systemAudio
 
             let capturedDurationSeconds = [
                 capturedScreenVideoResult.durationSeconds,
@@ -300,12 +289,6 @@ private extension CaptureCompositionSession {
             .min() ?? CaptureClock.hostTimeSeconds()
     }
 
-    // func earliestDate(
-    //     _ dates: [Date]
-    // ) -> Date {
-    //     dates.min() ?? Date()
-    // }
-
     func normalizedTimelineOffset(
         _ offset: TimeInterval
     ) -> TimeInterval {
@@ -318,20 +301,5 @@ private extension CaptureCompositionSession {
         }
 
         return offset
-    }
-
-    func recordSystemAudioIfNeeded(
-        configuration: CaptureConfiguration,
-        stopSignal: CaptureStopSignal
-    ) async throws -> CaptureSystemAudioRecordingResult? {
-        guard configuration.systemAudio.enabled else {
-            return nil
-        }
-
-        return try await ScreenCaptureSystemAudioRecorder().recordSystemAudioUntilStopped(
-            configuration: configuration,
-            stopSignal: stopSignal,
-            deviceProvider: deviceProvider
-        )
     }
 }

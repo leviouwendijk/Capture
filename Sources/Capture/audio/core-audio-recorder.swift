@@ -1,4 +1,3 @@
-import AudioToolbox
 import Foundation
 
 public struct CoreAudioRecorder: Sendable {
@@ -19,7 +18,7 @@ public struct CoreAudioRecorder: Sendable {
             configuration: configuration
         )
 
-        let recorder = AudioQueueRecorder(
+        let recording = CoreAudioWAVRecordingPipeline(
             device: resolved.audioInput,
             audio: configuration.audio,
             output: configuration.output
@@ -29,7 +28,7 @@ public struct CoreAudioRecorder: Sendable {
         var startedHostTimeSeconds = CaptureClock.hostTimeSeconds()
 
         do {
-            try recorder.start()
+            try recording.start()
 
             startedAt = Date()
             startedHostTimeSeconds = CaptureClock.hostTimeSeconds()
@@ -38,9 +37,9 @@ public struct CoreAudioRecorder: Sendable {
                 nanoseconds: UInt64(options.durationSeconds) * 1_000_000_000
             )
 
-            try recorder.stop()
+            try recording.stop()
         } catch {
-            try? recorder.stop()
+            recording.cancel()
             throw error
         }
 
@@ -50,7 +49,7 @@ public struct CoreAudioRecorder: Sendable {
             durationSeconds: options.durationSeconds,
             startedAt: startedAt,
             startedHostTimeSeconds: startedHostTimeSeconds,
-            firstSampleHostTimeSeconds: recorder.firstSampleHostTimeSeconds()
+            firstSampleHostTimeSeconds: recording.firstSampleHostTimeSeconds()
         )
     }
 
@@ -69,7 +68,7 @@ public struct CoreAudioRecorder: Sendable {
             configuration: configuration
         )
 
-        let recorder = AudioQueueRecorder(
+        let recording = CoreAudioWAVRecordingPipeline(
             device: resolved.audioInput,
             audio: configuration.audio,
             output: configuration.output
@@ -79,16 +78,16 @@ public struct CoreAudioRecorder: Sendable {
         var startedHostTimeSeconds = CaptureClock.hostTimeSeconds()
 
         do {
-            try recorder.start()
+            try recording.start()
 
             startedAt = Date()
             startedHostTimeSeconds = CaptureClock.hostTimeSeconds()
 
             await stopSignal.wait()
 
-            try recorder.stop()
+            try recording.stop()
         } catch {
-            try? recorder.stop()
+            recording.cancel()
             throw error
         }
 
@@ -105,7 +104,7 @@ public struct CoreAudioRecorder: Sendable {
             ),
             startedAt: startedAt,
             startedHostTimeSeconds: startedHostTimeSeconds,
-            firstSampleHostTimeSeconds: recorder.firstSampleHostTimeSeconds()
+            firstSampleHostTimeSeconds: recording.firstSampleHostTimeSeconds()
         )
     }
 }
@@ -121,5 +120,77 @@ internal extension CoreAudioRecorder {
                 "Audio-only capture currently writes .wav output."
             )
         }
+    }
+}
+
+internal final class CoreAudioWAVRecordingPipeline: @unchecked Sendable {
+    private let sink: WAVAudioSink
+    private let stream: CoreAudioInputStream
+
+    internal init(
+        device: CaptureDevice,
+        audio: CaptureAudioOptions,
+        output: URL
+    ) {
+        let sink = WAVAudioSink(
+            output: output
+        )
+
+        self.sink = sink
+        self.stream = CoreAudioInputStream(
+            device: device,
+            audio: audio,
+            startHandler: { format in
+                try sink.start(
+                    format: format
+                )
+            },
+            bufferHandler: { buffer in
+                try sink.append(
+                    buffer
+                )
+            }
+        )
+    }
+
+    internal func start() throws {
+        do {
+            try stream.start()
+        } catch {
+            sink.cancel()
+            throw error
+        }
+    }
+
+    internal func stop() throws {
+        var capturedError: Error?
+
+        do {
+            try stream.stop()
+        } catch {
+            capturedError = error
+        }
+
+        do {
+            try sink.finish()
+        } catch {
+            if capturedError == nil {
+                capturedError = error
+            }
+        }
+
+        if let capturedError {
+            throw capturedError
+        }
+    }
+
+    internal func cancel() {
+        try? stream.stop()
+
+        sink.cancel()
+    }
+
+    internal func firstSampleHostTimeSeconds() -> TimeInterval? {
+        stream.firstSampleHostTimeSeconds()
     }
 }

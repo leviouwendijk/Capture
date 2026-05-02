@@ -2,43 +2,50 @@ import AudioToolbox
 import CoreAudio
 import Foundation
 
-internal final class AudioQueueRecorder: @unchecked Sendable {
+internal final class CoreAudioInputStream: CaptureAudioInputStream, @unchecked Sendable {
     private let device: CaptureDevice
     private let audio: CaptureAudioOptions
-    private let output: URL
+    private let startHandler: CaptureAudioInputStartHandler
+    private let bufferHandler: CaptureAudioInputBufferHandler
     private let stateLock = NSLock()
 
     private var format: AudioStreamBasicDescription
     private var queue: AudioQueueRef?
-    private var audioFile: AudioFileID?
-    private var packetIndex: Int64 = 0
     private var isRunning = false
     private var callbackStatus: OSStatus = noErr
+    private var callbackError: Error?
     private var firstInputHostTimeSeconds: TimeInterval?
 
-    init(
+    internal init(
         device: CaptureDevice,
         audio: CaptureAudioOptions,
-        output: URL
+        startHandler: @escaping CaptureAudioInputStartHandler = { _ in },
+        bufferHandler: @escaping CaptureAudioInputBufferHandler
     ) {
         self.device = device
         self.audio = audio
-        self.output = output
+        self.startHandler = startHandler
+        self.bufferHandler = bufferHandler
         self.format = Self.makeFormat(
             audio: audio
         )
     }
 
-    func start() throws {
+    internal func start() throws {
         do {
-            try prepareOutputDirectory()
             try createQueue()
             try setCurrentDevice()
-            try createAudioFile()
+
+            try startHandler(
+                format
+            )
+
             try enqueueBuffers()
 
             stateLock.lock()
             isRunning = true
+            callbackStatus = noErr
+            callbackError = nil
             stateLock.unlock()
 
             try check(
@@ -54,14 +61,16 @@ internal final class AudioQueueRecorder: @unchecked Sendable {
         }
     }
 
-    func stop() throws {
+    internal func stop() throws {
         stateLock.lock()
+
         let capturedQueue = queue
-        let capturedFile = audioFile
         let capturedStatus = callbackStatus
+        let capturedError = callbackError
+
         isRunning = false
         queue = nil
-        audioFile = nil
+
         stateLock.unlock()
 
         if let capturedQueue {
@@ -76,20 +85,18 @@ internal final class AudioQueueRecorder: @unchecked Sendable {
             )
         }
 
-        if let capturedFile {
-            AudioFileClose(
-                capturedFile
-            )
+        if let capturedError {
+            throw capturedError
         }
 
         guard capturedStatus == noErr else {
             throw CaptureError.audioCapture(
-                "Could not write audio packets. OSStatus=\(capturedStatus)"
+                "Could not capture audio packets. OSStatus=\(capturedStatus)"
             )
         }
     }
 
-    func firstSampleHostTimeSeconds() -> TimeInterval? {
+    internal func firstSampleHostTimeSeconds() -> TimeInterval? {
         stateLock.lock()
         let value = firstInputHostTimeSeconds
         stateLock.unlock()
@@ -98,7 +105,7 @@ internal final class AudioQueueRecorder: @unchecked Sendable {
     }
 }
 
-private extension AudioQueueRecorder {
+private extension CoreAudioInputStream {
     static let inputCallback: AudioQueueInputCallback = {
         userData,
         queue,
@@ -111,16 +118,16 @@ private extension AudioQueueRecorder {
             return
         }
 
-        let recorder = Unmanaged<AudioQueueRecorder>
+        let stream = Unmanaged<CoreAudioInputStream>
             .fromOpaque(
                 userData
             )
             .takeUnretainedValue()
 
-        recorder.handleInput(
+        stream.handleInput(
             queue: queue,
             buffer: buffer,
-            inputHostTimeSeconds: AudioQueueRecorder.audioHostTimeSeconds(
+            inputHostTimeSeconds: CoreAudioInputStream.audioHostTimeSeconds(
                 from: startTime
             ),
             packetCount: packetCount,
@@ -172,19 +179,6 @@ private extension AudioQueueRecorder {
         return TimeInterval(
             nanoseconds
         ) / 1_000_000_000
-    }
-
-    func prepareOutputDirectory() throws {
-        let directory = output.deletingLastPathComponent()
-
-        guard !directory.path.isEmpty else {
-            return
-        }
-
-        try FileManager.default.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true
-        )
     }
 
     func createQueue() throws {
@@ -246,29 +240,6 @@ private extension AudioQueueRecorder {
         )
     }
 
-    func createAudioFile() throws {
-        var createdFile: AudioFileID?
-
-        try check(
-            AudioFileCreateWithURL(
-                output as CFURL,
-                kAudioFileWAVEType,
-                &format,
-                .eraseFile,
-                &createdFile
-            ),
-            message: "Could not create audio output file."
-        )
-
-        guard let createdFile else {
-            throw CaptureError.audioCapture(
-                "Audio output file was not created."
-            )
-        }
-
-        audioFile = createdFile
-    }
-
     func enqueueBuffers() throws {
         let queue = try requireQueue()
         let framesPerBuffer = UInt32(
@@ -319,11 +290,13 @@ private extension AudioQueueRecorder {
         packetCount: UInt32,
         packetDescriptions: UnsafePointer<AudioStreamPacketDescription>?
     ) {
+        let inputBuffer: CaptureAudioInputBuffer
+
         stateLock.lock()
 
         guard isRunning,
-              let audioFile,
-              callbackStatus == noErr else {
+              callbackStatus == noErr,
+              callbackError == nil else {
             stateLock.unlock()
             return
         }
@@ -341,26 +314,63 @@ private extension AudioQueueRecorder {
             firstInputHostTimeSeconds = inputHostTimeSeconds
         }
 
-        let status = AudioFileWritePackets(
-            audioFile,
-            false,
-            buffer.pointee.mAudioDataByteSize,
-            packetDescriptions,
-            packetIndex,
-            &packets,
-            buffer.pointee.mAudioData
+        let byteCount = Int(
+            buffer.pointee.mAudioDataByteSize
         )
+        let bytesPerFrame = Int(
+            format.mBytesPerFrame
+        )
+        let frameCount: Int
 
-        if status == noErr {
-            packetIndex += Int64(
+        if bytesPerFrame > 0 {
+            frameCount = byteCount / bytesPerFrame
+        } else {
+            frameCount = Int(
                 packets
             )
-        } else {
-            callbackStatus = status
         }
+
+        let data: Data
+
+        if byteCount > 0 {
+            data = Data(
+                bytes: buffer.pointee.mAudioData,
+                count: byteCount
+            )
+        } else {
+            data = Data()
+        }
+
+        inputBuffer = CaptureAudioInputBuffer(
+            data: data,
+            frameCount: frameCount,
+            packetCount: packets,
+            sampleRate: Int(
+                format.mSampleRate.rounded()
+            ),
+            channelCount: Int(
+                format.mChannelsPerFrame
+            ),
+            hostTimeSeconds: inputHostTimeSeconds
+        )
+
+        stateLock.unlock()
+
+        do {
+            try bufferHandler(
+                inputBuffer
+            )
+        } catch {
+            recordCallbackError(
+                error
+            )
+        }
+
+        stateLock.lock()
 
         let shouldContinue = isRunning
             && callbackStatus == noErr
+            && callbackError == nil
 
         stateLock.unlock()
 
@@ -368,12 +378,44 @@ private extension AudioQueueRecorder {
             return
         }
 
-        AudioQueueEnqueueBuffer(
+        let enqueueStatus = AudioQueueEnqueueBuffer(
             queue,
             buffer,
             0,
             nil
         )
+
+        guard enqueueStatus != noErr else {
+            return
+        }
+
+        recordCallbackStatus(
+            enqueueStatus
+        )
+    }
+
+    func recordCallbackStatus(
+        _ status: OSStatus
+    ) {
+        stateLock.lock()
+
+        if callbackStatus == noErr {
+            callbackStatus = status
+        }
+
+        stateLock.unlock()
+    }
+
+    func recordCallbackError(
+        _ error: Error
+    ) {
+        stateLock.lock()
+
+        if callbackError == nil {
+            callbackError = error
+        }
+
+        stateLock.unlock()
     }
 
     func requireQueue() throws -> AudioQueueRef {

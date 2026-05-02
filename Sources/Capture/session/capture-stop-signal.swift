@@ -2,8 +2,10 @@ import Foundation
 
 public final class CaptureStopSignal: @unchecked Sendable {
     private let lock = NSLock()
+
     private var stopped = false
-    private var continuations: [CheckedContinuation<Void, Never>] = []
+    private var continuations: [UUID: CheckedContinuation<Void, Never>] = [:]
+    private var cancelledWaits: Set<UUID> = []
 
     public init() {}
 
@@ -16,6 +18,8 @@ public final class CaptureStopSignal: @unchecked Sendable {
     }
 
     public func wait() async {
+        let id = UUID()
+
         await withTaskCancellationHandler {
             if isStopped() {
                 return
@@ -23,7 +27,8 @@ public final class CaptureStopSignal: @unchecked Sendable {
 
             await withCheckedContinuation { continuation in
                 let shouldResume = addContinuation(
-                    continuation
+                    id: id,
+                    continuation: continuation
                 )
 
                 if shouldResume {
@@ -31,7 +36,11 @@ public final class CaptureStopSignal: @unchecked Sendable {
                 }
             }
         } onCancel: {
-            self.stop()
+            if let continuation = self.cancelContinuation(
+                id: id
+            ) {
+                continuation.resume()
+            }
         }
     }
 }
@@ -46,7 +55,8 @@ private extension CaptureStopSignal {
     }
 
     func addContinuation(
-        _ continuation: CheckedContinuation<Void, Never>
+        id: UUID,
+        continuation: CheckedContinuation<Void, Never>
     ) -> Bool {
         lock.lock()
 
@@ -55,13 +65,43 @@ private extension CaptureStopSignal {
             return true
         }
 
-        continuations.append(
-            continuation
-        )
+        if cancelledWaits.remove(
+            id
+        ) != nil {
+            lock.unlock()
+            return true
+        }
+
+        continuations[id] = continuation
 
         lock.unlock()
 
         return false
+    }
+
+    func cancelContinuation(
+        id: UUID
+    ) -> CheckedContinuation<Void, Never>? {
+        lock.lock()
+
+        if stopped {
+            lock.unlock()
+            return nil
+        }
+
+        let continuation = continuations.removeValue(
+            forKey: id
+        )
+
+        if continuation == nil {
+            cancelledWaits.insert(
+                id
+            )
+        }
+
+        lock.unlock()
+
+        return continuation
     }
 
     func drainContinuations() -> [CheckedContinuation<Void, Never>] {
@@ -73,8 +113,13 @@ private extension CaptureStopSignal {
         }
 
         stopped = true
-        let capturedContinuations = continuations
+
+        let capturedContinuations = Array(
+            continuations.values
+        )
+
         continuations.removeAll()
+        cancelledWaits.removeAll()
 
         lock.unlock()
 

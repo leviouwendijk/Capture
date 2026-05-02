@@ -77,24 +77,17 @@ public final class CaptureSession: Sendable {
                 output: audioOutput
             )
 
-            let systemAudioConfiguration = try CaptureConfiguration(
-                display: configuration.display,
-                video: configuration.video,
-                audio: configuration.audio,
-                systemAudio: configuration.systemAudio,
-                audioMix: configuration.audioMix,
-                container: .mov,
-                output: systemAudioOutput
-            )
-
             await report(
                 .recordingStarted(
                     startedAt: Date()
                 )
             )
 
-            async let videoResult = ScreenCaptureVideoRecorder().recordVideoUntilStopped(
+            async let screenMediaResult = ScreenCaptureMediaRecorder().recordMediaUntilStopped(
                 configuration: videoConfiguration,
+                systemAudioOutput: configuration.systemAudio.enabled
+                    ? systemAudioOutput
+                    : nil,
                 stopSignal: stopSignal,
                 deviceProvider: deviceProvider
             )
@@ -105,14 +98,10 @@ public final class CaptureSession: Sendable {
                 deviceProvider: deviceProvider
             )
 
-            async let systemAudioResult = recordSystemAudioIfNeeded(
-                configuration: systemAudioConfiguration,
-                stopSignal: stopSignal
-            )
-
-            let capturedVideoResult = try await videoResult
+            let capturedScreenMediaResult = try await screenMediaResult
+            let capturedVideoResult = capturedScreenMediaResult.video
             let capturedAudioResult = try await audioResult
-            let capturedSystemAudioResult = try await systemAudioResult
+            let capturedSystemAudioResult = capturedScreenMediaResult.systemAudio
 
             let capturedDurationSeconds = [
                 capturedVideoResult.durationSeconds,
@@ -255,21 +244,6 @@ extension CaptureSession {
 
         await progress(
             event
-        )
-    }
-
-    internal func recordSystemAudioIfNeeded(
-        configuration: CaptureConfiguration,
-        stopSignal: CaptureStopSignal
-    ) async throws -> CaptureSystemAudioRecordingResult? {
-        guard configuration.systemAudio.enabled else {
-            return nil
-        }
-
-        return try await ScreenCaptureSystemAudioRecorder().recordSystemAudioUntilStopped(
-            configuration: configuration,
-            stopSignal: stopSignal,
-            deviceProvider: deviceProvider
         )
     }
 }

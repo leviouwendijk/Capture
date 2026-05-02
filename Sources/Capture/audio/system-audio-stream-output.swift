@@ -46,6 +46,24 @@ internal final class ScreenCaptureSystemAudioStreamOutput: NSObject, SCStreamOut
         stopError = error
         lock.unlock()
 
+        writer.fail(
+            CaptureError.audioCapture(
+                Self.describe(
+                    error
+                )
+            )
+        )
+
         stopSignal?.stop()
+    }
+}
+
+private extension ScreenCaptureSystemAudioStreamOutput {
+    static func describe(
+        _ error: Error
+    ) -> String {
+        let nsError = error as NSError
+
+        return "System audio stream stopped unexpectedly. \(nsError.localizedDescription) domain=\(nsError.domain) code=\(nsError.code) userInfo=\(nsError.userInfo)"
     }
 }

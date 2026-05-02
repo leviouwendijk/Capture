@@ -1,7 +1,5 @@
 import AVFoundation
-// import CoreGraphics
 import Foundation
-// import ScreenCaptureKit
 
 internal struct ScreenCaptureSystemAudioWriterFinishResult {
     let sampleBufferCount: Int
@@ -224,4 +222,3 @@ internal extension ScreenCaptureSystemAudioWriter {
         return "\(nsError.localizedDescription) domain=\(nsError.domain) code=\(nsError.code) userInfo=\(nsError.userInfo)"
     }
 }
-
