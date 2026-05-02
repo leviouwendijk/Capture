@@ -119,23 +119,70 @@ private extension CaptureCLIStoragePreflight {
     static func availableBytes(
         at directory: URL
     ) -> Int64? {
-        if let values = try? directory.resourceValues(
-            forKeys: [
-                .volumeAvailableCapacityForImportantUsageKey,
-            ]
-        ),
-        let available = values.volumeAvailableCapacityForImportantUsage {
-            return available
-        }
-
-        guard let attributes = try? FileManager.default.attributesOfFileSystem(
+        if let attributes = try? FileManager.default.attributesOfFileSystem(
             forPath: directory.path
         ),
-        let freeSize = attributes[.systemFreeSize] as? NSNumber else {
+        let freeSize = attributes[.systemFreeSize] as? NSNumber {
+            let value = freeSize.int64Value
+
+            if value > 0 {
+                return value
+            }
+        }
+
+        guard let values = try? directory.resourceValues(
+            forKeys: [
+                .volumeAvailableCapacityKey,
+                .volumeAvailableCapacityForImportantUsageKey,
+                .volumeAvailableCapacityForOpportunisticUsageKey,
+            ]
+        ) else {
             return nil
         }
 
-        return freeSize.int64Value
+        if let available = positiveCapacity(
+            values.volumeAvailableCapacity
+        ) {
+            return available
+        }
+
+        if let available = positiveCapacity(
+            values.volumeAvailableCapacityForImportantUsage
+        ) {
+            return available
+        }
+
+        if let available = positiveCapacity(
+            values.volumeAvailableCapacityForOpportunisticUsage
+        ) {
+            return available
+        }
+
+        return nil
+    }
+
+    static func positiveCapacity(
+        _ value: Int?
+    ) -> Int64? {
+        guard let value,
+              value > 0 else {
+            return nil
+        }
+
+        return Int64(
+            value
+        )
+    }
+
+    static func positiveCapacity(
+        _ value: Int64?
+    ) -> Int64? {
+        guard let value,
+              value > 0 else {
+            return nil
+        }
+
+        return value
     }
 
     static func byteDescription(

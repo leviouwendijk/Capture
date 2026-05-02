@@ -50,12 +50,26 @@ public struct CameraVideoRecorder: Sendable {
 
             session.startRunning()
 
+            guard session.isRunning else {
+                throw CaptureError.videoCapture(
+                    "Camera capture session did not start for \(resolved.videoInput.name)."
+                )
+            }
+
             let startedAt = Date()
             let startedHostTimeSeconds = CaptureClock.hostTimeSeconds()
 
             await stopSignal.wait()
 
             session.stopRunning()
+
+            let streamSnapshot = streamOutput.snapshot()
+
+            guard streamSnapshot.sampleCount > 0 else {
+                throw CaptureError.videoCapture(
+                    "No camera output callbacks were received from \(resolved.videoInput.name). Dropped callbacks: \(streamSnapshot.droppedSampleCount)."
+                )
+            }
 
             let duration = Date().timeIntervalSince(
                 startedAt

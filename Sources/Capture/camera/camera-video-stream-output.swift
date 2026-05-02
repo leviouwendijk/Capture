@@ -1,6 +1,19 @@
 import AVFoundation
 import Foundation
 
+internal struct CameraVideoStreamSnapshot: Sendable, Hashable {
+    internal let sampleCount: Int
+    internal let droppedSampleCount: Int
+
+    internal init(
+        sampleCount: Int,
+        droppedSampleCount: Int
+    ) {
+        self.sampleCount = sampleCount
+        self.droppedSampleCount = droppedSampleCount
+    }
+}
+
 internal final class CameraVideoStreamOutput: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     let queue = DispatchQueue(
         label: "capture.camera.video.samples"
@@ -40,5 +53,17 @@ internal final class CameraVideoStreamOutput: NSObject, AVCaptureVideoDataOutput
         lock.lock()
         droppedSampleCount += 1
         lock.unlock()
+    }
+
+    func snapshot() -> CameraVideoStreamSnapshot {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+
+        return CameraVideoStreamSnapshot(
+            sampleCount: sampleCount,
+            droppedSampleCount: droppedSampleCount
+        )
     }
 }
