@@ -5,6 +5,7 @@ public struct CaptureCompositionRecordingResult: Sendable, Codable, Hashable {
     public let durationSeconds: Int
     public let video: CaptureResolvedVideoOptions
     public let screenFrameCount: Int
+    public let screenVideoDiagnostics: CaptureVideoRecordingDiagnostics
     public let cameraFrameCount: Int
     public let audioTrackCount: Int
     public let audioLayout: CaptureAudioLayout
@@ -18,6 +19,7 @@ public struct CaptureCompositionRecordingResult: Sendable, Codable, Hashable {
         durationSeconds: Int,
         video: CaptureResolvedVideoOptions,
         screenFrameCount: Int,
+        screenVideoDiagnostics: CaptureVideoRecordingDiagnostics,
         cameraFrameCount: Int,
         audioTrackCount: Int,
         audioLayout: CaptureAudioLayout,
@@ -30,6 +32,7 @@ public struct CaptureCompositionRecordingResult: Sendable, Codable, Hashable {
         self.durationSeconds = durationSeconds
         self.video = video
         self.screenFrameCount = screenFrameCount
+        self.screenVideoDiagnostics = screenVideoDiagnostics
         self.cameraFrameCount = cameraFrameCount
         self.audioTrackCount = audioTrackCount
         self.audioLayout = audioLayout

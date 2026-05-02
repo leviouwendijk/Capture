@@ -136,8 +136,9 @@ public final class CaptureCompositionSession: Sendable {
                     snapshot: CaptureRecordingHealthSnapshot(
                         screenVideoFrameCount: capturedScreenVideoResult.frameCount,
                         cameraVideoFrameCount: capturedCameraVideoResult.frameCount,
-                        videoMissedFrameBudget: capturedScreenVideoResult.diagnostics.missedFrameBudget,
+                        videoMissedFrameBudget: capturedScreenVideoResult.diagnostics.targetFrameShortfall,
                         videoAppendSkipCount: capturedScreenVideoResult.diagnostics.appendSkipCount,
+                        videoDroppedFrameCount: capturedScreenVideoResult.diagnostics.droppedFrameCount,
                         systemAudioEnabled: configuration.systemAudio.enabled,
                         systemAudioSampleBufferCount: capturedSystemAudioResult?.sampleBufferCount
                     )
@@ -252,6 +253,7 @@ public final class CaptureCompositionSession: Sendable {
                 durationSeconds: composedVideoResult.durationSeconds,
                 video: composedVideoResult.video,
                 screenFrameCount: capturedScreenVideoResult.frameCount,
+                screenVideoDiagnostics: capturedScreenVideoResult.diagnostics,
                 cameraFrameCount: capturedCameraVideoResult.frameCount,
                 audioTrackCount: configuration.audioMix.requiresAudioRendering
                     ? 1

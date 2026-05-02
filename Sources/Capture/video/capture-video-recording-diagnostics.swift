@@ -63,6 +63,10 @@ public struct CaptureVideoRecordingDiagnostics: Sendable, Codable, Hashable {
         self.stopErrorDescription = stopErrorDescription
     }
 
+    public var targetFramesPerSecond: Int {
+        requestedFramesPerSecond
+    }
+
     public var effectiveFramesPerSecond: Double {
         guard recordedSeconds > 0 else {
             return 0
@@ -79,23 +83,31 @@ public struct CaptureVideoRecordingDiagnostics: Sendable, Codable, Hashable {
         return Double(completeFrameStatusCount) / recordedSeconds
     }
 
-    public var requestedFrameBudget: Int {
+    public var targetFrameBudget: Int {
         guard recordedSeconds > 0 else {
             return 0
         }
 
         return Int(
             (
-                Double(requestedFramesPerSecond) * recordedSeconds
+                Double(targetFramesPerSecond) * recordedSeconds
             ).rounded()
         )
     }
 
-    public var missedFrameBudget: Int {
+    public var requestedFrameBudget: Int {
+        targetFrameBudget
+    }
+
+    public var targetFrameShortfall: Int {
         max(
             0,
-            requestedFrameBudget - finishedFrameCount
+            targetFrameBudget - finishedFrameCount
         )
+    }
+
+    public var missedFrameBudget: Int {
+        targetFrameShortfall
     }
 
     public var appendSkipCount: Int {
@@ -107,11 +119,26 @@ public struct CaptureVideoRecordingDiagnostics: Sendable, Codable, Hashable {
             + skippedAfterFailureFrameCount
     }
 
+    public var idleSourceSampleCount: Int {
+        frameStatusRawValueCounts[1] ?? 0
+    }
+
     public var incompleteSourceSampleCount: Int {
         incompleteFrameStatusCount + missingFrameStatusCount
     }
 
+    public var nonIdleIncompleteSourceSampleCount: Int {
+        max(
+            0,
+            incompleteSourceSampleCount - idleSourceSampleCount
+        )
+    }
+
+    public var droppedFrameCount: Int {
+        appendSkipCount + nonIdleIncompleteSourceSampleCount
+    }
+
     public var summary: String {
-        "samples total=\(totalSampleCount) screen=\(screenSampleCount) valid=\(validSampleCount) ready=\(readySampleCount) completeStatus=\(completeFrameStatusCount) incompleteStatus=\(incompleteFrameStatusCount) missingStatus=\(missingFrameStatusCount) statusRaw=\(frameStatusRawValueCounts) appended=\(appendedFrameCount) finished=\(finishedFrameCount) writerNotReady=\(writerNotReadyFrameCount) missingPixelBuffer=\(missingPixelBufferFrameCount) invalidPresentationTime=\(invalidPresentationTimeFrameCount) appendFailed=\(appendFailedFrameCount) skippedAfterFinished=\(skippedAfterFinishedFrameCount) skippedAfterFailure=\(skippedAfterFailureFrameCount) stopError=\(stopErrorDescription ?? "none")"
+        "samples total=\(totalSampleCount) screen=\(screenSampleCount) valid=\(validSampleCount) ready=\(readySampleCount) completeStatus=\(completeFrameStatusCount) incompleteStatus=\(incompleteFrameStatusCount) missingStatus=\(missingFrameStatusCount) statusRaw=\(frameStatusRawValueCounts) appended=\(appendedFrameCount) finished=\(finishedFrameCount) targetBudget=\(targetFrameBudget) targetShortfall=\(targetFrameShortfall) dropped=\(droppedFrameCount) writerNotReady=\(writerNotReadyFrameCount) missingPixelBuffer=\(missingPixelBufferFrameCount) invalidPresentationTime=\(invalidPresentationTimeFrameCount) appendFailed=\(appendFailedFrameCount) skippedAfterFinished=\(skippedAfterFinishedFrameCount) skippedAfterFailure=\(skippedAfterFailureFrameCount) stopError=\(stopErrorDescription ?? "none")"
     }
 }

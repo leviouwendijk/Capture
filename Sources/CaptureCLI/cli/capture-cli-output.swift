@@ -435,8 +435,8 @@ private extension CaptureCLI {
                 )
             ),
             .init(
-                "requested fps",
-                "\(diagnostics.requestedFramesPerSecond)"
+                "target fps",
+                "\(diagnostics.targetFramesPerSecond)"
             ),
             .init(
                 "effective fps",
@@ -452,11 +452,15 @@ private extension CaptureCLI {
             ),
             .init(
                 "frames",
-                "\(diagnostics.finishedFrameCount) finished / \(diagnostics.requestedFrameBudget) requested budget"
+                "\(diagnostics.finishedFrameCount) finished / \(diagnostics.targetFrameBudget) target budget"
             ),
             .init(
-                "missed budget",
-                "\(diagnostics.missedFrameBudget)"
+                "target shortfall",
+                "\(diagnostics.targetFrameShortfall)"
+            ),
+            .init(
+                "dropped frames",
+                "\(diagnostics.droppedFrameCount)"
             ),
             .init(
                 "source samples",
@@ -573,8 +577,20 @@ private extension CaptureCLI {
                 "\(result.video.width)x\(result.video.height)"
             ),
             .init(
-                "fps",
-                "\(result.video.fps)"
+                "target fps",
+                "\(result.screenVideoDiagnostics.targetFramesPerSecond)"
+            ),
+            .init(
+                "effective fps",
+                framesPerSecondDescription(
+                    result.screenVideoDiagnostics.effectiveFramesPerSecond
+                )
+            ),
+            .init(
+                "source fps",
+                framesPerSecondDescription(
+                    result.screenVideoDiagnostics.completeSourceFramesPerSecond
+                )
             ),
             .init(
                 "quality",
@@ -589,6 +605,14 @@ private extension CaptureCLI {
             .init(
                 "screen frames",
                 "\(result.screenFrameCount)"
+            ),
+            .init(
+                "screen dropped frames",
+                "\(result.screenVideoDiagnostics.droppedFrameCount)"
+            ),
+            .init(
+                "screen target shortfall",
+                "\(result.screenVideoDiagnostics.targetFrameShortfall)"
             ),
             .init(
                 "camera frames",
@@ -706,39 +730,33 @@ private extension CaptureCLI {
     static func qualityStatusDescription(
         _ diagnostics: CaptureVideoRecordingDiagnostics
     ) -> String {
-        let requested = Double(
-            diagnostics.requestedFramesPerSecond
+        let target = Double(
+            diagnostics.targetFramesPerSecond
         )
 
-        guard requested > 0 else {
+        guard target > 0 else {
             return "unknown"
         }
 
-        let ratio = diagnostics.effectiveFramesPerSecond / requested
-        let idleCount = diagnostics.frameStatusRawValueCounts[
-            1
-        ] ?? 0
-        let nonIdleIncompleteCount = max(
-            0,
-            diagnostics.incompleteSourceSampleCount - idleCount
-        )
+        let ratio = diagnostics.effectiveFramesPerSecond / target
+        let nonIdleIncompleteCount = diagnostics.nonIdleIncompleteSourceSampleCount
 
         if ratio >= 0.95,
            diagnostics.writerNotReadyFrameCount == 0,
-           nonIdleIncompleteCount == 0 {
+           diagnostics.droppedFrameCount == 0 {
             return "ok"
         }
 
         if diagnostics.writerNotReadyFrameCount > 0 {
-            return "writer backpressure; lower resolution/fps or bitrate"
+            return "writer backpressure; best effort below target"
         }
 
         if nonIdleIncompleteCount > 0 {
-            return "source delivered non-complete frames; below requested fps"
+            return "source dropped or delivered incomplete frames"
         }
 
         if ratio < 0.95 {
-            return "source delivered fewer changed frames than requested"
+            return "below target fps; best effort"
         }
 
         return "ok"

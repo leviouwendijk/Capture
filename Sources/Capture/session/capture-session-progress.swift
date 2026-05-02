@@ -6,6 +6,7 @@ public struct CaptureRecordingHealthSnapshot: Sendable, Codable, Hashable {
     public let videoFrameCount: Int?
     public let videoMissedFrameBudget: Int?
     public let videoAppendSkipCount: Int?
+    public let videoDroppedFrameCount: Int?
     public let systemAudioEnabled: Bool
     public let systemAudioSampleBufferCount: Int?
 
@@ -15,6 +16,7 @@ public struct CaptureRecordingHealthSnapshot: Sendable, Codable, Hashable {
         videoFrameCount: Int? = nil,
         videoMissedFrameBudget: Int? = nil,
         videoAppendSkipCount: Int? = nil,
+        videoDroppedFrameCount: Int? = nil,
         systemAudioEnabled: Bool = false,
         systemAudioSampleBufferCount: Int? = nil
     ) {
@@ -23,6 +25,7 @@ public struct CaptureRecordingHealthSnapshot: Sendable, Codable, Hashable {
         self.videoFrameCount = videoFrameCount
         self.videoMissedFrameBudget = videoMissedFrameBudget
         self.videoAppendSkipCount = videoAppendSkipCount
+        self.videoDroppedFrameCount = videoDroppedFrameCount
         self.systemAudioEnabled = systemAudioEnabled
         self.systemAudioSampleBufferCount = systemAudioSampleBufferCount
     }
@@ -37,6 +40,11 @@ public struct CaptureRecordingHealthSnapshot: Sendable, Codable, Hashable {
             },
             videoFrameCount.map {
                 "video frames: \($0)"
+            },
+            videoDroppedFrameCount.flatMap {
+                $0 > 0
+                    ? "dropped frames: \($0)"
+                    : nil
             },
             systemAudioEnabled
                 ? "system buffers: \(systemAudioSampleBufferCount ?? 0)"
@@ -81,6 +89,13 @@ public struct CaptureRecordingHealthSnapshot: Sendable, Codable, Hashable {
             )
         }
 
+        if let videoDroppedFrameCount,
+           videoDroppedFrameCount > 0 {
+            warnings.append(
+                "video dropped \(videoDroppedFrameCount) frames"
+            )
+        }
+
         if let videoAppendSkipCount,
            videoAppendSkipCount > 0 {
             warnings.append(
@@ -91,7 +106,7 @@ public struct CaptureRecordingHealthSnapshot: Sendable, Codable, Hashable {
         if let videoMissedFrameBudget,
            videoMissedFrameBudget > 0 {
             warnings.append(
-                "video missed \(videoMissedFrameBudget) frames against the requested frame budget"
+                "video finished \(videoMissedFrameBudget) frames below the target fps budget"
             )
         }
 

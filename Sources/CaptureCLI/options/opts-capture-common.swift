@@ -10,6 +10,9 @@ struct CaptureOutputOptions: Sendable, ArgumentGroup {
     )
     var path: String?
 
+    @Flag("overwrite")
+    var overwrite: Bool
+
     init() {}
 
     func url() throws -> URL {
@@ -17,8 +20,77 @@ struct CaptureOutputOptions: Sendable, ArgumentGroup {
             message: "Missing --output."
         )
 
-        return URL(
+        let output = URL(
             fileURLWithPath: path.expandingTilde()
+        )
+
+        try confirmOverwriteIfNeeded(
+            output
+        )
+
+        return output
+    }
+}
+
+private extension CaptureOutputOptions {
+    func confirmOverwriteIfNeeded(
+        _ output: URL
+    ) throws {
+        var isDirectory: ObjCBool = false
+
+        guard FileManager.default.fileExists(
+            atPath: output.path,
+            isDirectory: &isDirectory
+        ) else {
+            return
+        }
+
+        guard !isDirectory.boolValue else {
+            throw CaptureCLIError.outputPathIsDirectory(
+                output
+            )
+        }
+
+        guard !overwrite else {
+            return
+        }
+
+        guard askOverwrite(
+            output
+        ) else {
+            throw CaptureCLIError.overwriteDeclined(
+                output
+            )
+        }
+    }
+
+    func askOverwrite(
+        _ output: URL
+    ) -> Bool {
+        writePrompt(
+            """
+            capture: output file already exists:
+              \(output.path)
+            Overwrite? [y/N] 
+            """
+        )
+
+        let answer = readLine()?
+            .trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            .lowercased()
+
+        return answer == "y" || answer == "yes"
+    }
+
+    func writePrompt(
+        _ value: String
+    ) {
+        FileHandle.standardError.write(
+            Data(
+                value.utf8
+            )
         )
     }
 }

@@ -113,8 +113,9 @@ public final class CaptureSession: Sendable {
                 .recordingHealth(
                     snapshot: CaptureRecordingHealthSnapshot(
                         videoFrameCount: capturedVideoResult.frameCount,
-                        videoMissedFrameBudget: capturedVideoResult.diagnostics.missedFrameBudget,
+                        videoMissedFrameBudget: capturedVideoResult.diagnostics.targetFrameShortfall,
                         videoAppendSkipCount: capturedVideoResult.diagnostics.appendSkipCount,
+                        videoDroppedFrameCount: capturedVideoResult.diagnostics.droppedFrameCount,
                         systemAudioEnabled: configuration.systemAudio.enabled,
                         systemAudioSampleBufferCount: capturedSystemAudioResult?.sampleBufferCount
                     )

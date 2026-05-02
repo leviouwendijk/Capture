@@ -4,6 +4,8 @@ enum CaptureCLIError: Error, LocalizedError {
     case missing(String)
     case invalidQuality(value: String, allowed: [String])
     case invalidAudioLayout(value: String, allowed: [String])
+    case overwriteDeclined(URL)
+    case outputPathIsDirectory(URL)
 
     var errorDescription: String? {
         switch self {
@@ -15,6 +17,12 @@ enum CaptureCLIError: Error, LocalizedError {
 
         case .invalidAudioLayout(let value, let allowed):
             return "Invalid audio layout: \(value). Expected one of: \(allowed.joined(separator: ", "))."
+
+        case .overwriteDeclined(let output):
+            return "Refusing to overwrite existing output file: \(output.path). Pass --overwrite to skip confirmation."
+
+        case .outputPathIsDirectory(let output):
+            return "Output path is a directory: \(output.path). Choose a file path."
         }
     }
 }
