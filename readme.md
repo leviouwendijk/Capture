@@ -317,4 +317,5 @@ I tried doing this with `ffmpeg`, but it caused audio underruns I could not and 
 * [x] loss-less failure behavior for partial recording files
 * [x] workspace/tempdir override
 * [x] recording failure as system notifications
+* [ ] make ins, outs, sinks reusable components
 
