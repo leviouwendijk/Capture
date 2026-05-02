@@ -3,13 +3,20 @@ import Foundation
 internal enum CaptureRecordingInstance {
     internal enum workspace {
         internal static func create(
-            prefix: String
+            prefix: String,
+            options: CaptureWorkspaceOptions = .standard
         ) throws -> URL {
-            let workingDirectory = FileManager.default.temporaryDirectory
-                .appendingPathComponent(
-                    "\(prefix)-\(UUID().uuidString)",
-                    isDirectory: true
-                )
+            let root = options.resolvedRoot
+
+            try FileManager.default.createDirectory(
+                at: root,
+                withIntermediateDirectories: true
+            )
+
+            let workingDirectory = root.appendingPathComponent(
+                "\(prefix)-\(UUID().uuidString)",
+                isDirectory: true
+            )
 
             try FileManager.default.createDirectory(
                 at: workingDirectory,
@@ -58,10 +65,12 @@ internal enum CaptureRecordingInstance {
 
         internal static func attempt<Result>(
             prefix: String,
+            workspace options: CaptureWorkspaceOptions = .standard,
             operation: (URL) async throws -> Result
         ) async throws -> Result {
             let workdir = try workspace.create(
-                prefix: prefix
+                prefix: prefix,
+                options: options
             )
 
             return try await errorcatch(

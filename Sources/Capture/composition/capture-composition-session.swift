@@ -3,17 +3,20 @@ import Foundation
 public final class CaptureCompositionSession: Sendable {
     public let configuration: CaptureCompositionConfiguration
     public let options: CaptureRecordOptions
+    public let workspace: CaptureWorkspaceOptions
     public let deviceProvider: any CaptureDeviceProvider
     public let progress: CaptureSessionProgressHandler?
 
     public init(
         configuration: CaptureCompositionConfiguration,
         options: CaptureRecordOptions = .standard,
+        workspace: CaptureWorkspaceOptions = .standard,
         deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
         progress: CaptureSessionProgressHandler? = nil
     ) {
         self.configuration = configuration
         self.options = options
+        self.workspace = workspace
         self.deviceProvider = deviceProvider
         self.progress = progress
     }
@@ -40,7 +43,8 @@ public final class CaptureCompositionSession: Sendable {
         stopSignal: CaptureStopSignal
     ) async throws -> CaptureCompositionRecordingResult {
         try await CaptureRecordingInstance.execute.attempt(
-            prefix: "capture-composition"
+            prefix: "capture-composition",
+            workspace: workspace
         ) { workdir in
             let screenVideoOutput = workdir.appendingPathComponent(
                 "screen-video.mov"

@@ -1,5 +1,5 @@
 {
-  "originHash" : "1adc583962a965fe9344434dda48e7992e7294753861890aadd312fea5dfef0f",
+  "originHash" : "0282d8c1b2732cc739555753c515913e7b18508d962d66594aad009bbd898ad8",
   "pins" : [
     {
       "identity" : "ansi",
@@ -16,7 +16,7 @@
       "location" : "https://github.com/leviouwendijk/Arguments.git",
       "state" : {
         "branch" : "master",
-        "revision" : "d35c47e106b42596ac86a8e2afa3e384f3f018cc"
+        "revision" : "554f854bf59b88f3bc97a41e6fa622430d88e75c"
       }
     },
     {
@@ -26,6 +26,15 @@
       "state" : {
         "branch" : "master",
         "revision" : "ca0f33316fcf56ace04f1f5a1bb178667a291abc"
+      }
+    },
+    {
+      "identity" : "methods",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/leviouwendijk/Methods.git",
+      "state" : {
+        "branch" : "master",
+        "revision" : "62656c2e32b7889df68415464b67b440f7e7e464"
       }
     },
     {

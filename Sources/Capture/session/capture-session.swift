@@ -4,17 +4,20 @@ import Foundation
 public final class CaptureSession: Sendable {
     public let configuration: CaptureConfiguration
     public let options: CaptureRecordOptions
+    public let workspace: CaptureWorkspaceOptions
     public let deviceProvider: any CaptureDeviceProvider
     public let progress: CaptureSessionProgressHandler?
 
     public init(
         configuration: CaptureConfiguration,
         options: CaptureRecordOptions = .standard,
+        workspace: CaptureWorkspaceOptions = .standard,
         deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
         progress: CaptureSessionProgressHandler? = nil
     ) {
         self.configuration = configuration
         self.options = options
+        self.workspace = workspace
         self.deviceProvider = deviceProvider
         self.progress = progress
     }
@@ -41,7 +44,8 @@ public final class CaptureSession: Sendable {
         stopSignal: CaptureStopSignal
     ) async throws -> CaptureRecordingResult {
         try await CaptureRecordingInstance.execute.attempt(
-            prefix: "capture"
+            prefix: "capture",
+            workspace: workspace
         ) { workdir in
             let videoOutput = workdir.appendingPathComponent(
                 "video.mov"

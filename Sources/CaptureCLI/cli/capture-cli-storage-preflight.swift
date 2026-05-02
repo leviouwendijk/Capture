@@ -13,7 +13,7 @@ internal enum CaptureCLIStoragePreflight {
 
     static func ensureAvailable(
         output: URL,
-        temporaryDirectory: URL = FileManager.default.temporaryDirectory,
+        workspace: CaptureWorkspaceOptions = .standard,
         video: CaptureResolvedVideoOptions,
         durationSeconds: Int?,
         mode: CaptureCLIStorageMode
@@ -31,9 +31,9 @@ internal enum CaptureCLIStoragePreflight {
         )
 
         try ensureAvailable(
-            at: temporaryDirectory,
+            at: workspace.resolvedRoot,
             requiredBytes: requiredBytes,
-            label: "temporary"
+            label: "workspace"
         )
     }
 }

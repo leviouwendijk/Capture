@@ -25,6 +25,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/leviouwendijk/Terminal.git", branch: "master"),
         .package(url: "https://github.com/leviouwendijk/Arguments.git", branch: "master"),
+        .package(url: "https://github.com/leviouwendijk/Methods.git", branch: "master"),
         .package(url: "https://github.com/leviouwendijk/TestFlows.git", branch: "master"),
     ],
     targets: [
@@ -37,6 +38,7 @@ let package = Package(
                 "Capture",
                 .product(name: "Terminal", package: "Terminal"),
                 .product(name: "Arguments", package: "Arguments"),
+                .product(name: "Methods", package: "Methods"),
             ],
             path: "Sources/CaptureCLI",
         ),
