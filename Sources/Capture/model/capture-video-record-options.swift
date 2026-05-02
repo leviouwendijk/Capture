@@ -1,15 +1,31 @@
 public struct CaptureVideoRecordOptions: Sendable, Codable, Hashable {
-    public let durationSeconds: Int
+    public static let standard = CaptureVideoRecordOptions(
+        uncheckedDuration: .standard
+    )
+
+    public let duration: CaptureRecordDuration
 
     public init(
-        durationSeconds: Int = 5
-    ) throws {
-        guard durationSeconds > 0 else {
-            throw CaptureError.invalidDurationSeconds(
-                durationSeconds
-            )
-        }
+        duration: CaptureRecordDuration = .standard
+    ) {
+        self.duration = duration
+    }
 
-        self.durationSeconds = durationSeconds
+    public init(
+        durationSeconds: Int = CaptureRecordDuration.standard.seconds
+    ) throws {
+        self.duration = try CaptureRecordDuration(
+            seconds: durationSeconds
+        )
+    }
+
+    private init(
+        uncheckedDuration duration: CaptureRecordDuration
+    ) {
+        self.duration = duration
+    }
+
+    public var durationSeconds: Int {
+        duration.seconds
     }
 }

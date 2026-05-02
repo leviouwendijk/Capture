@@ -15,12 +15,15 @@ extension CaptureCLI {
     static func recordingStartedLines(
         output: URL,
         audioName: String?,
-        systemAudioEnabled: Bool,
-        audioMix: CaptureAudioMixOptions,
-        video: CaptureResolvedVideoOptions,
+        systemAudioEnabled: Bool? = nil,
+        audioMix: CaptureAudioMixOptions? = nil,
+        video: CaptureResolvedVideoOptions? = nil,
         limitSeconds: Int?,
         cameraName: String? = nil,
-        layoutDescription: String? = nil
+        layoutDescription: String? = nil,
+        audioSampleRate: Int? = nil,
+        audioChannelCount: Int? = nil,
+        title: String = "capture: recording"
     ) -> [String] {
         let mode: String
         let stop: String
@@ -67,41 +70,65 @@ extension CaptureCLI {
             )
         }
 
-        fields.append(
-            .init(
-                "system audio",
-                systemAudioEnabled ? "enabled" : "disabled"
+        if let audioSampleRate {
+            fields.append(
+                .init(
+                    "sample rate",
+                    "\(audioSampleRate) Hz"
+                )
             )
-        )
+        }
 
-        fields.append(
-            contentsOf: [
+        if let audioChannelCount {
+            fields.append(
                 .init(
-                    "audio layout",
-                    audioMix.requiresAudioRendering
-                        ? CaptureAudioLayout.mixed.rawValue
-                        : audioMix.layout.rawValue
-                ),
-                .init(
-                    "mic gain",
-                    gainDescription(
-                        audioMix.microphoneGain
-                    )
-                ),
-                .init(
-                    "system gain",
-                    gainDescription(
-                        audioMix.systemGain
-                    )
-                ),
-            ]
-        )
-
-        fields.append(
-            contentsOf: videoConfigurationFields(
-                video
+                    "channels",
+                    "\(audioChannelCount)"
+                )
             )
-        )
+        }
+
+        if let systemAudioEnabled {
+            fields.append(
+                .init(
+                    "system audio",
+                    systemAudioEnabled ? "enabled" : "disabled"
+                )
+            )
+        }
+
+        if let audioMix {
+            fields.append(
+                contentsOf: [
+                    .init(
+                        "audio layout",
+                        audioMix.requiresAudioRendering
+                            ? CaptureAudioLayout.mixed.rawValue
+                            : audioMix.layout.rawValue
+                    ),
+                    .init(
+                        "mic gain",
+                        gainDescription(
+                            audioMix.microphoneGain
+                        )
+                    ),
+                    .init(
+                        "system gain",
+                        gainDescription(
+                            audioMix.systemGain
+                        )
+                    ),
+                ]
+            )
+        }
+
+        if let video {
+            fields.append(
+                contentsOf: videoConfigurationFields(
+                    video
+                )
+            )
+        }
 
         fields.append(
             contentsOf: [
@@ -118,7 +145,7 @@ extension CaptureCLI {
 
         return renderedLines(
             TerminalBlock(
-                title: "capture: recording",
+                title: title,
                 fields: fields,
                 theme: .agentic,
                 layout: captureOutputLayout
@@ -147,6 +174,61 @@ extension CaptureCLI {
         writeBlock(
             TerminalBlock(
                 title: "capture: wrote video",
+                fields: fields,
+                theme: .agentic,
+                layout: captureOutputLayout
+            )
+        )
+    }
+
+    static func writeAudioSummary(
+        result: CaptureAudioRecordingResult,
+        audio: CaptureAudioOptions,
+        exportDurationSeconds: TimeInterval? = nil
+    ) {
+        var fields: [TerminalField] = [
+            .init(
+                "output",
+                result.output.path
+            ),
+            .init(
+                "mic audio",
+                result.device.name
+            ),
+            .init(
+                "duration",
+                TerminalDurationFormatter.format(
+                    TimeInterval(
+                        result.durationSeconds
+                    )
+                )
+            ),
+            .init(
+                "sample rate",
+                "\(audio.sampleRate) Hz"
+            ),
+            .init(
+                "channels",
+                "\(audio.channel)"
+            ),
+            .init(
+                "first sample",
+                audioFirstSampleDescription(
+                    result
+                )
+            ),
+        ]
+
+        fields.append(
+            contentsOf: outputMetadataFields(
+                output: result.output,
+                exportDurationSeconds: exportDurationSeconds
+            )
+        )
+
+        writeBlock(
+            TerminalBlock(
+                title: "capture: wrote audio",
                 fields: fields,
                 theme: .agentic,
                 layout: captureOutputLayout
@@ -759,6 +841,18 @@ private extension CaptureCLI {
         )
 
         return fields
+    }
+
+    static func audioFirstSampleDescription(
+        _ result: CaptureAudioRecordingResult
+    ) -> String {
+        guard let firstSampleHostTimeSeconds = result.firstSampleHostTimeSeconds else {
+            return "unknown"
+        }
+
+        return syncOffsetDescription(
+            firstSampleHostTimeSeconds - result.startedHostTimeSeconds
+        )
     }
 
     static func outputByteCount(

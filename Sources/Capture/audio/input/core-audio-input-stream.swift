@@ -33,6 +33,7 @@ internal final class CoreAudioInputStream: CaptureAudioInputStream, @unchecked S
 
     internal func start() throws {
         do {
+            try validateAudio()
             try createQueue()
             try setCurrentDevice()
 
@@ -179,6 +180,14 @@ private extension CoreAudioInputStream {
         return TimeInterval(
             nanoseconds
         ) / 1_000_000_000
+    }
+
+    func validateAudio() throws {
+        guard audio.codec == .pcm else {
+            throw CaptureError.audioCapture(
+                "CoreAudio input stream currently supports PCM only."
+            )
+        }
     }
 
     func createQueue() throws {

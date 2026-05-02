@@ -12,6 +12,7 @@ public final class CaptureAudioInputSession: @unchecked Sendable {
     private let lock = NSLock()
 
     private var stream: CoreAudioInputStream?
+    private var startResult: CaptureAudioInputStartResult?
 
     public init(
         audio: CaptureAudioOptions,
@@ -23,8 +24,15 @@ public final class CaptureAudioInputSession: @unchecked Sendable {
         self.handler = handler
     }
 
-    public func start() async throws {
-        let resolvedDevice = try await resolveAudioInput()
+    @discardableResult
+    public func start() async throws -> CaptureAudioInputStartResult {
+        try validateAudio()
+
+        let resolvedDevice = try await CaptureAudioDeviceResolver(
+            provider: deviceProvider
+        ).resolve(
+            audio.device
+        )
 
         let stream = CoreAudioInputStream(
             device: resolvedDevice,
@@ -32,12 +40,21 @@ public final class CaptureAudioInputSession: @unchecked Sendable {
             bufferHandler: handler
         )
 
+        let result = CaptureAudioInputStartResult(
+            device: resolvedDevice,
+            sampleRate: audio.sampleRate,
+            channelCount: audio.channel
+        )
+
         try install(
-            stream
+            stream,
+            result: result
         )
 
         do {
             try stream.start()
+
+            return result
         } catch {
             removeIfCurrent(
                 stream
@@ -55,19 +72,26 @@ public final class CaptureAudioInputSession: @unchecked Sendable {
         try? stop()
     }
 
+    public func currentStartResult() -> CaptureAudioInputStartResult? {
+        currentResult()
+    }
+
     public func firstSampleHostTimeSeconds() -> TimeInterval? {
         currentStream()?.firstSampleHostTimeSeconds()
     }
 
+    @discardableResult
     public func runUntilStopped(
         stopSignal: CaptureStopSignal
-    ) async throws {
-        try await start()
+    ) async throws -> CaptureAudioInputStartResult {
+        let result = try await start()
 
         do {
             await stopSignal.wait()
 
             try stop()
+
+            return result
         } catch {
             cancel()
 
@@ -75,8 +99,9 @@ public final class CaptureAudioInputSession: @unchecked Sendable {
         }
     }
 
-    public func runUntilCancelled() async throws {
-        try await start()
+    @discardableResult
+    public func runUntilCancelled() async throws -> CaptureAudioInputStartResult {
+        let result = try await start()
 
         do {
             try await withTaskCancellationHandler {
@@ -90,8 +115,12 @@ public final class CaptureAudioInputSession: @unchecked Sendable {
             }
 
             try stop()
+
+            return result
         } catch is CancellationError {
             cancel()
+
+            return result
         } catch {
             cancel()
 
@@ -101,8 +130,17 @@ public final class CaptureAudioInputSession: @unchecked Sendable {
 }
 
 private extension CaptureAudioInputSession {
+    func validateAudio() throws {
+        guard audio.codec == .pcm else {
+            throw CaptureError.audioCapture(
+                "Live audio input currently supports PCM only."
+            )
+        }
+    }
+
     func install(
-        _ stream: CoreAudioInputStream
+        _ stream: CoreAudioInputStream,
+        result: CaptureAudioInputStartResult
     ) throws {
         lock.lock()
         defer {
@@ -116,6 +154,7 @@ private extension CaptureAudioInputSession {
         }
 
         self.stream = stream
+        self.startResult = result
     }
 
     func removeIfCurrent(
@@ -128,6 +167,7 @@ private extension CaptureAudioInputSession {
 
         if self.stream === stream {
             self.stream = nil
+            self.startResult = nil
         }
     }
 
@@ -140,6 +180,7 @@ private extension CaptureAudioInputSession {
         let capturedStream = stream
 
         stream = nil
+        startResult = nil
 
         return capturedStream
     }
@@ -153,55 +194,12 @@ private extension CaptureAudioInputSession {
         return stream
     }
 
-    func resolveAudioInput() async throws -> CaptureDevice {
-        let devices = try await deviceProvider.audioInputs()
-
-        guard !devices.isEmpty else {
-            throw CaptureError.noDevices(
-                .audio_input
-            )
+    func currentResult() -> CaptureAudioInputStartResult? {
+        lock.lock()
+        defer {
+            lock.unlock()
         }
 
-        switch audio.device {
-        case .systemDefault:
-            return devices[0]
-
-        case .name(let name):
-            if let exact = devices.first(
-                where: {
-                    $0.name == name
-                        || $0.id == name
-                }
-            ) {
-                return exact
-            }
-
-            if let caseInsensitive = devices.first(
-                where: {
-                    $0.name.localizedCaseInsensitiveCompare(
-                        name
-                    ) == .orderedSame
-                }
-            ) {
-                return caseInsensitive
-            }
-
-            throw CaptureError.deviceNotFound(
-                kind: .audio_input,
-                value: name
-            )
-
-        case .identifier(let identifier):
-            guard let device = devices.first(
-                where: { $0.id == identifier }
-            ) else {
-                throw CaptureError.deviceNotFound(
-                    kind: .audio_input,
-                    value: identifier
-                )
-            }
-
-            return device
-        }
+        return startResult
     }
 }

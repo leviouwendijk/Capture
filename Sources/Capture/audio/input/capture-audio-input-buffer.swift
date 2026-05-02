@@ -30,31 +30,38 @@ public struct CaptureAudioInputBuffer: Sendable {
 }
 
 public extension CaptureAudioInputBuffer {
-    func monoFloatSamples() -> [Float] {
-        guard channelCount > 0,
-              frameCount > 0,
-              !data.isEmpty else {
-            return []
-        }
-
-        return data.withUnsafeBytes { rawBuffer in
+    func withInt16Samples<Result>(
+        _ body: (UnsafeBufferPointer<Int16>) throws -> Result
+    ) rethrows -> Result {
+        try data.withUnsafeBytes { rawBuffer in
             let samples = rawBuffer.bindMemory(
                 to: Int16.self
             )
 
+            return try body(
+                samples
+            )
+        }
+    }
+
+    func forEachMonoFloatSample(
+        _ body: (Float) throws -> Void
+    ) rethrows {
+        guard channelCount > 0,
+              frameCount > 0,
+              !data.isEmpty else {
+            return
+        }
+
+        try withInt16Samples { samples in
             let resolvedFrameCount = min(
                 frameCount,
                 samples.count / channelCount
             )
 
             guard resolvedFrameCount > 0 else {
-                return []
+                return
             }
-
-            var output: [Float] = []
-            output.reserveCapacity(
-                resolvedFrameCount
-            )
 
             for frameIndex in 0..<resolvedFrameCount {
                 var sum: Float = 0
@@ -67,14 +74,39 @@ public extension CaptureAudioInputBuffer {
                     ) / 32768.0
                 }
 
-                output.append(
+                try body(
                     sum / Float(
                         channelCount
                     )
                 )
             }
-
-            return output
         }
+    }
+
+    func appendMonoFloatSamples(
+        to output: inout [Float]
+    ) {
+        forEachMonoFloatSample { sample in
+            output.append(
+                sample
+            )
+        }
+    }
+
+    func monoFloatSamples() -> [Float] {
+        var output: [Float] = []
+
+        output.reserveCapacity(
+            max(
+                0,
+                frameCount
+            )
+        )
+
+        appendMonoFloatSamples(
+            to: &output
+        )
+
+        return output
     }
 }

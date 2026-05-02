@@ -72,12 +72,15 @@ internal extension CaptureCLI {
     static func recordingTimer(
         limitSeconds: Int?,
         output: URL,
-        audioName: String,
-        systemAudioEnabled: Bool,
-        audioMix: CaptureAudioMixOptions,
-        video: CaptureResolvedVideoOptions,
+        audioName: String?,
+        systemAudioEnabled: Bool? = nil,
+        audioMix: CaptureAudioMixOptions? = nil,
+        video: CaptureResolvedVideoOptions? = nil,
         cameraName: String? = nil,
-        layoutDescription: String? = nil
+        layoutDescription: String? = nil,
+        audioSampleRate: Int? = nil,
+        audioChannelCount: Int? = nil,
+        title: String = "capture: recording"
     ) -> TerminalLiveStatusLine {
         TerminalLiveStatusLine(
             limitSeconds: limitSeconds.map(
@@ -91,7 +94,10 @@ internal extension CaptureCLI {
                 video: video,
                 limitSeconds: limitSeconds,
                 cameraName: cameraName,
-                layoutDescription: layoutDescription
+                layoutDescription: layoutDescription,
+                audioSampleRate: audioSampleRate,
+                audioChannelCount: audioChannelCount,
+                title: title
             )
         ) { frame in
             if let limitText = frame.limitText,
