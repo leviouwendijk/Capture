@@ -101,8 +101,12 @@ internal final class ScreenCaptureSystemAudioWriter: @unchecked Sendable {
 
         if !started {
             guard writer.startWriting() else {
-                failure = writer.error.map(Self.describe)
-                    .map(CaptureError.audioCapture)
+                failure = writer.error.map {
+                    CaptureErrorDescription.technical(
+                        $0
+                    )
+                }
+                .map(CaptureError.audioCapture)
                     ?? CaptureError.audioCapture(
                         "Could not start system audio writer."
                     )
@@ -122,8 +126,12 @@ internal final class ScreenCaptureSystemAudioWriter: @unchecked Sendable {
         guard input.append(
             sampleBuffer
         ) else {
-            failure = writer.error.map(Self.describe)
-                .map(CaptureError.audioCapture)
+            failure = writer.error.map {
+                CaptureErrorDescription.technical(
+                    $0
+                )
+            }
+            .map(CaptureError.audioCapture)
                 ?? CaptureError.audioCapture(
                     "Could not append system audio sample buffer."
                 )
@@ -206,19 +214,15 @@ internal extension ScreenCaptureSystemAudioWriter {
         }
 
         guard writer.status == .completed else {
-            throw writer.error.map(Self.describe)
-                .map(CaptureError.audioCapture)
+            throw writer.error.map {
+                CaptureErrorDescription.technical(
+                    $0
+                )
+            }
+            .map(CaptureError.audioCapture)
                 ?? CaptureError.audioCapture(
                     "System audio writer did not finish successfully."
                 )
         }
-    }
-
-    static func describe(
-        _ error: Error
-    ) -> String {
-        CaptureErrorDescription.technical(
-            error
-        )
     }
 }
