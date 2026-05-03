@@ -319,3 +319,4 @@ I tried doing this with `ffmpeg`, but it caused audio underruns I could not and 
 * [x] recording failure as system notifications
 * [-] make ins, outs, sinks reusable components
 * [ ] overwrite-confirmation, explicit --overwrite flag for override of overwrite-confirmatio step
+* [ ] fix continuity camera latent failures
