@@ -7,6 +7,7 @@ struct AudioCommandOptions: Sendable, ArgumentParsed {
 
     let output: URL
     let audio: CaptureAudioOptions
+    let microphoneChain: AudioChain
     let durationSeconds: Int?
 
     init(
@@ -18,6 +19,7 @@ struct AudioCommandOptions: Sendable, ArgumentParsed {
             channel: arguments.channel,
             codec: .pcm
         )
+        self.microphoneChain = arguments.microphoneChain.chain
         self.durationSeconds = try arguments.duration.optional()
     }
 
@@ -30,6 +32,9 @@ struct AudioCommandOptions: Sendable, ArgumentParsed {
 
         @Group("audio")
         var microphone: CaptureMicrophoneOptions
+
+        @Group("mic-chain")
+        var microphoneChain: CaptureMicrophoneChainOptions
 
         @Opt(
             "sample-rate",

@@ -179,6 +179,26 @@ public extension AudioEqualizer {
                 q: q
             )
         }
+
+        public static func lowcut(
+            frequency: Float,
+            q: Float = 0.707
+        ) -> AudioEqualizer.Band {
+            highpass(
+                frequency: frequency,
+                q: q
+            )
+        }
+
+        public static func highcut(
+            frequency: Float,
+            q: Float = 0.707
+        ) -> AudioEqualizer.Band {
+            lowpass(
+                frequency: frequency,
+                q: q
+            )
+        }
     }
 
     struct Parametric: AudioProcessor {

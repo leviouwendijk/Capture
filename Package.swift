@@ -30,7 +30,10 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "Capture"
+            name: "Capture",
+            dependencies: [
+                .product(name: "Arguments", package: "Arguments"),
+            ]
         ),
         .executableTarget(
             name: "capturer",

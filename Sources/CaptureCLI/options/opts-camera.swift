@@ -11,6 +11,7 @@ struct CameraCommandOptions: Sendable, ArgumentParsed {
     let video: CaptureVideoOptions
     let audio: CaptureAudioOptions
     let audioMix: CaptureAudioMixOptions
+    let microphoneChain: AudioChain
     let cameraName: String
     let configuration: CaptureCameraConfiguration
 
@@ -31,6 +32,7 @@ struct CameraCommandOptions: Sendable, ArgumentParsed {
         self.video = video
         self.audio = audio
         self.audioMix = audioMix
+        self.microphoneChain = arguments.microphoneChain.chain
         self.cameraName = arguments.camera.displayName
         self.configuration = try CaptureCameraConfiguration(
             camera: arguments.camera.camera,
@@ -63,10 +65,12 @@ struct CameraCommandOptions: Sendable, ArgumentParsed {
         @Group("audio")
         var microphone: CaptureMicrophoneOptions
 
+        @Group("mic-chain")
+        var microphoneChain: CaptureMicrophoneChainOptions
+
         @Group("gain")
         var gain: CaptureMicrophoneGainOptions
 
         init() {}
     }
 }
-

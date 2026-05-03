@@ -48,7 +48,8 @@ enum AudioCommandRunner {
             let result = try await CoreAudioRecorder().record.mode(
                 mode,
                 configuration: configuration,
-                stopSignal: stopSignal
+                stopSignal: stopSignal,
+                chain: options.microphoneChain
             )
 
             listener?.stop()

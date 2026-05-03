@@ -89,7 +89,7 @@ internal extension CameraVideoRecorder {
                 )
             }
 
-            try await streamOutput.waitForFirstRecordedFrame(
+            _ = try await streamOutput.waitForFirstRecordedFrame(
                 timeoutSeconds: 8,
                 deviceName: resolved.videoInput.name
             )

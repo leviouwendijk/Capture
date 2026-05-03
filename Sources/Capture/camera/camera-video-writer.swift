@@ -9,6 +9,25 @@ internal struct CameraVideoWriterFinishResult {
     let firstPresentationTimeSeconds: Double?
 }
 
+internal struct CameraVideoWriterSnapshot: Sendable, Hashable {
+    internal let frameCount: Int
+    internal let started: Bool
+    internal let finished: Bool
+    internal let failureDescription: String?
+
+    internal init(
+        frameCount: Int,
+        started: Bool,
+        finished: Bool,
+        failureDescription: String?
+    ) {
+        self.frameCount = frameCount
+        self.started = started
+        self.finished = finished
+        self.failureDescription = failureDescription
+    }
+}
+
 internal final class CameraVideoWriter: @unchecked Sendable {
     private let output: URL
     private let container: CaptureContainer
@@ -38,9 +57,10 @@ internal final class CameraVideoWriter: @unchecked Sendable {
         try prepareOutput()
     }
 
+    @discardableResult
     func append(
         _ sampleBuffer: CMSampleBuffer
-    ) {
+    ) -> Bool {
         lock.lock()
         defer {
             lock.unlock()
@@ -48,7 +68,7 @@ internal final class CameraVideoWriter: @unchecked Sendable {
 
         guard !finished,
               failure == nil else {
-            return
+            return false
         }
 
         guard sampleBuffer.isValid,
@@ -58,7 +78,7 @@ internal final class CameraVideoWriter: @unchecked Sendable {
               let pixelBuffer = CMSampleBufferGetImageBuffer(
                 sampleBuffer
               ) else {
-            return
+            return false
         }
 
         let presentationTime = CMSampleBufferGetPresentationTimeStamp(
@@ -66,7 +86,7 @@ internal final class CameraVideoWriter: @unchecked Sendable {
         )
 
         guard presentationTime.isValid else {
-            return
+            return false
         }
 
         do {
@@ -96,7 +116,8 @@ internal final class CameraVideoWriter: @unchecked Sendable {
                         ?? CaptureError.videoCapture(
                             "Could not start camera video writer."
                         )
-                    return
+
+                    return false
                 }
 
                 writer.startSession(
@@ -107,7 +128,7 @@ internal final class CameraVideoWriter: @unchecked Sendable {
 
             guard let input,
                   input.isReadyForMoreMediaData else {
-                return
+                return false
             }
 
             guard input.append(
@@ -118,14 +139,33 @@ internal final class CameraVideoWriter: @unchecked Sendable {
                     ?? CaptureError.videoCapture(
                         "Could not append camera video sample buffer."
                     )
-                return
+
+                return false
             }
 
             lastPresentationTime = presentationTime
             frameCount += 1
+
+            return true
         } catch {
             failure = error
+
+            return false
         }
+    }
+
+    func snapshot() -> CameraVideoWriterSnapshot {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+
+        return CameraVideoWriterSnapshot(
+            frameCount: frameCount,
+            started: started,
+            finished: finished,
+            failureDescription: failure.map(Self.describe)
+        )
     }
 
     func fail(
@@ -289,11 +329,13 @@ private extension CameraVideoWriter {
         }
 
         guard writer.status == .completed else {
-            throw writer.error.map(Self.describe)
-                .map(CaptureError.videoCapture)
-                ?? CaptureError.videoCapture(
-                    "Camera video writer did not finish successfully."
+            throw writer.error.map {
+                CaptureError.videoCapture(
+                    "Camera video writer did not finish successfully. status=\(writer.status.rawValue). \(Self.describe($0))"
                 )
+            } ?? CaptureError.videoCapture(
+                "Camera video writer did not finish successfully. status=\(writer.status.rawValue)."
+            )
         }
     }
 

@@ -57,7 +57,8 @@ enum ComposeCommandRunner {
                     durationSeconds: durationSeconds
                 ),
                 workspace: options.workspace,
-                deviceProvider: provider
+                deviceProvider: provider,
+                microphoneChain: options.microphoneChain
             ) { progress in
                 await progressRenderer.handle(
                     progress
@@ -88,7 +89,8 @@ enum ComposeCommandRunner {
             let session = CaptureCompositionSession(
                 configuration: options.configuration,
                 workspace: options.workspace,
-                deviceProvider: provider
+                deviceProvider: provider,
+                microphoneChain: options.microphoneChain
             ) { progress in
                 await progressRenderer.handle(
                     progress

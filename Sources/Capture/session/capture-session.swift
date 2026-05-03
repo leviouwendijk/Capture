@@ -6,6 +6,7 @@ public final class CaptureSession: Sendable {
     public let options: CaptureRecordOptions
     public let workspace: CaptureWorkspaceOptions
     public let deviceProvider: any CaptureDeviceProvider
+    public let microphoneChain: AudioChain
     public let progress: CaptureSessionProgressHandler?
 
     public init(
@@ -13,12 +14,14 @@ public final class CaptureSession: Sendable {
         options: CaptureRecordOptions = .standard,
         workspace: CaptureWorkspaceOptions = .standard,
         deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
+        microphoneChain: AudioChain = .raw,
         progress: CaptureSessionProgressHandler? = nil
     ) {
         self.configuration = configuration
         self.options = options
         self.workspace = workspace
         self.deviceProvider = deviceProvider
+        self.microphoneChain = microphoneChain
         self.progress = progress
     }
 
@@ -95,7 +98,8 @@ public final class CaptureSession: Sendable {
             async let audioResult = CoreAudioRecorder().recordAudioUntilStopped(
                 configuration: audioConfiguration,
                 stopSignal: stopSignal,
-                deviceProvider: deviceProvider
+                deviceProvider: deviceProvider,
+                chain: microphoneChain
             )
 
             let capturedScreenMediaResult = try await screenMediaResult

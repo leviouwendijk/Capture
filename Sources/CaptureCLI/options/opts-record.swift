@@ -8,6 +8,7 @@ struct RecordCommandOptions: Sendable, ArgumentParsed {
     let output: URL
     let workspace: CaptureWorkspaceOptions
     let durationSeconds: Int?
+    let microphoneChain: AudioChain
     let configuration: CaptureConfiguration
 
     init(
@@ -24,6 +25,7 @@ struct RecordCommandOptions: Sendable, ArgumentParsed {
         self.output = output
         self.workspace = arguments.workspace.workspace()
         self.durationSeconds = try arguments.duration.optional()
+        self.microphoneChain = arguments.microphoneChain.chain
         self.configuration = try CaptureConfiguration(
             video: video,
             audio: audio,
@@ -51,6 +53,9 @@ struct RecordCommandOptions: Sendable, ArgumentParsed {
 
         @Group("audio")
         var microphone: CaptureMicrophoneOptions
+
+        @Group("mic-chain")
+        var microphoneChain: CaptureMicrophoneChainOptions
 
         @Group("system-audio")
         var systemAudio: CaptureSystemAudioCLIOptions

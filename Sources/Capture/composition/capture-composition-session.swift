@@ -5,6 +5,7 @@ public final class CaptureCompositionSession: Sendable {
     public let options: CaptureRecordOptions
     public let workspace: CaptureWorkspaceOptions
     public let deviceProvider: any CaptureDeviceProvider
+    public let microphoneChain: AudioChain
     public let progress: CaptureSessionProgressHandler?
 
     public init(
@@ -12,12 +13,14 @@ public final class CaptureCompositionSession: Sendable {
         options: CaptureRecordOptions = .standard,
         workspace: CaptureWorkspaceOptions = .standard,
         deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
+        microphoneChain: AudioChain = .raw,
         progress: CaptureSessionProgressHandler? = nil
     ) {
         self.configuration = configuration
         self.options = options
         self.workspace = workspace
         self.deviceProvider = deviceProvider
+        self.microphoneChain = microphoneChain
         self.progress = progress
     }
 
@@ -91,11 +94,7 @@ public final class CaptureCompositionSession: Sendable {
                 output: audioOutput
             )
 
-            await report(
-                .recordingStarted(
-                    startedAt: Date()
-                )
-            )
+            let cameraReadiness = CaptureReadinessSignal()
 
             async let screenMediaResult = ScreenCaptureMediaRecorder().recordMediaUntilStopped(
                 configuration: screenVideoConfiguration,
@@ -109,13 +108,23 @@ public final class CaptureCompositionSession: Sendable {
             async let cameraVideoResult = CameraVideoRecorder().recordVideoUntilStopped(
                 configuration: cameraVideoConfiguration,
                 stopSignal: stopSignal,
-                deviceProvider: deviceProvider
+                deviceProvider: deviceProvider,
+                readiness: cameraReadiness
             )
 
             async let audioResult = CoreAudioRecorder().recordAudioUntilStopped(
                 configuration: audioConfiguration,
                 stopSignal: stopSignal,
-                deviceProvider: deviceProvider
+                deviceProvider: deviceProvider,
+                chain: microphoneChain
+            )
+
+            try await cameraReadiness.wait()
+
+            await report(
+                .recordingStarted(
+                    startedAt: Date()
+                )
             )
 
             let capturedScreenMediaResult = try await screenMediaResult

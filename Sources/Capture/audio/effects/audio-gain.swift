@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 public enum AudioGain {}
@@ -10,6 +11,27 @@ public struct AudioGainFactory: Sendable {
     ) -> AudioGain.Standard {
         AudioGain.Standard(
             amount
+        )
+    }
+
+    public func db(
+        _ db: Float = 0
+    ) -> AudioGain.Standard {
+        AudioGain.Standard(
+            Self.dbToLinear(
+                db
+            )
+        )
+    }
+}
+
+private extension AudioGainFactory {
+    static func dbToLinear(
+        _ db: Float
+    ) -> Float {
+        powf(
+            10,
+            db / 20
         )
     }
 }

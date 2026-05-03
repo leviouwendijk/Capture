@@ -8,6 +8,7 @@ struct ComposeCommandOptions: Sendable, ArgumentParsed {
     let output: URL
     let workspace: CaptureWorkspaceOptions
     let durationSeconds: Int?
+    let microphoneChain: AudioChain
     let layoutDescription: String
     let configuration: CaptureCompositionConfiguration
 
@@ -25,6 +26,7 @@ struct ComposeCommandOptions: Sendable, ArgumentParsed {
         self.output = output
         self.workspace = arguments.workspace.workspace()
         self.durationSeconds = try arguments.duration.optional()
+        self.microphoneChain = arguments.microphoneChain.chain
         self.layoutDescription = try arguments.layout.description()
         self.configuration = try CaptureCompositionConfiguration(
             camera: arguments.camera.camera,
@@ -58,6 +60,9 @@ struct ComposeCommandOptions: Sendable, ArgumentParsed {
 
         @Group("audio")
         var microphone: CaptureMicrophoneOptions
+
+        @Group("mic-chain")
+        var microphoneChain: CaptureMicrophoneChainOptions
 
         @Group("system-audio")
         var systemAudio: CaptureSystemAudioCLIOptions

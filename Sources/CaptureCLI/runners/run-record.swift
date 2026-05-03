@@ -43,7 +43,8 @@ enum RecordCommandRunner {
                     durationSeconds: durationSeconds
                 ),
                 workspace: options.workspace,
-                deviceProvider: provider
+                deviceProvider: provider,
+                microphoneChain: options.microphoneChain
             ) { progress in
                 await progressRenderer.handle(
                     progress
@@ -74,7 +75,8 @@ enum RecordCommandRunner {
             let session = CaptureSession(
                 configuration: options.configuration,
                 workspace: options.workspace,
-                deviceProvider: provider
+                deviceProvider: provider,
+                microphoneChain: options.microphoneChain
             ) { progress in
                 await progressRenderer.handle(
                     progress
