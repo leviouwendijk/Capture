@@ -17,7 +17,7 @@ public struct AudioCompressorFactory: Sendable {
         )
     }
 
-    public func softKnee(
+    public func softknee(
         threshold: Float = 0.18,
         ratio: Float = 3,
         makeup: Float = 1,
