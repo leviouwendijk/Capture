@@ -10,17 +10,21 @@ public final class CaptureAudioInputSession: @unchecked Sendable {
 
     private let handler: CaptureAudioInputHandler
     private let lock = NSLock()
+    private let chainLock = NSLock()
 
+    private var chain: Audio.Chain
     private var stream: CoreAudioInputStream?
     private var startResult: CaptureAudioInputStartResult?
 
     public init(
         audio: CaptureAudioOptions,
         deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
+        chain: Audio.Chain = .raw,
         handler: @escaping CaptureAudioInputHandler
     ) {
         self.audio = audio
         self.deviceProvider = deviceProvider
+        self.chain = chain
         self.handler = handler
     }
 
@@ -37,7 +41,11 @@ public final class CaptureAudioInputSession: @unchecked Sendable {
         let stream = CoreAudioInputStream(
             device: resolvedDevice,
             audio: audio,
-            bufferHandler: handler
+            bufferHandler: { buffer in
+                try self.handle(
+                    buffer
+                )
+            }
         )
 
         let result = CaptureAudioInputStartResult(
@@ -136,6 +144,31 @@ private extension CaptureAudioInputSession {
                 "Live audio input currently supports PCM only."
             )
         }
+    }
+
+    func handle(
+        _ buffer: CaptureAudioInputBuffer
+    ) throws {
+        let processed = try process(
+            buffer
+        )
+
+        try handler(
+            processed
+        )
+    }
+
+    func process(
+        _ buffer: CaptureAudioInputBuffer
+    ) throws -> CaptureAudioInputBuffer {
+        chainLock.lock()
+        defer {
+            chainLock.unlock()
+        }
+
+        return try chain.process(
+            buffer
+        )
     }
 
     func install(

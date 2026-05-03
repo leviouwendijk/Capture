@@ -20,26 +20,30 @@ public struct CoreAudioRecordActions: Sendable {
     public func duration(
         _ duration: CaptureRecordDuration,
         configuration: CaptureConfiguration,
-        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider()
+        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
+        chain: Audio.Chain = .raw
     ) async throws -> CaptureAudioRecordingResult {
         try await recorder.recordAudio(
             configuration: configuration,
             options: CaptureAudioRecordOptions(
                 duration: duration
             ),
-            deviceProvider: deviceProvider
+            deviceProvider: deviceProvider,
+            chain: chain
         )
     }
 
     public func live(
         configuration: CaptureConfiguration,
         stopSignal: CaptureStopSignal,
-        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider()
+        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
+        chain: Audio.Chain = .raw
     ) async throws -> CaptureAudioRecordingResult {
         try await recorder.recordAudioUntilStopped(
             configuration: configuration,
             stopSignal: stopSignal,
-            deviceProvider: deviceProvider
+            deviceProvider: deviceProvider,
+            chain: chain
         )
     }
 
@@ -47,21 +51,24 @@ public struct CoreAudioRecordActions: Sendable {
         _ mode: CaptureRecordMode,
         configuration: CaptureConfiguration,
         stopSignal: CaptureStopSignal,
-        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider()
+        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
+        chain: Audio.Chain = .raw
     ) async throws -> CaptureAudioRecordingResult {
         switch mode {
         case .live:
             return try await live(
                 configuration: configuration,
                 stopSignal: stopSignal,
-                deviceProvider: deviceProvider
+                deviceProvider: deviceProvider,
+                chain: chain
             )
 
         case .duration(let duration):
             return try await self.duration(
                 duration,
                 configuration: configuration,
-                deviceProvider: deviceProvider
+                deviceProvider: deviceProvider,
+                chain: chain
             )
         }
     }

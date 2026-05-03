@@ -6,7 +6,8 @@ public struct CoreAudioRecorder: Sendable {
     public func recordAudio(
         configuration: CaptureConfiguration,
         options: CaptureAudioRecordOptions,
-        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider()
+        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
+        chain: Audio.Chain = .raw
     ) async throws -> CaptureAudioRecordingResult {
         try validateOutput(
             configuration.output
@@ -21,7 +22,8 @@ public struct CoreAudioRecorder: Sendable {
         let recording = CoreAudioWAVRecordingPipeline(
             device: resolved.audioInput,
             audio: configuration.audio,
-            output: configuration.output
+            output: configuration.output,
+            chain: chain
         )
 
         var startedAt = Date()
@@ -56,7 +58,8 @@ public struct CoreAudioRecorder: Sendable {
     public func recordAudioUntilStopped(
         configuration: CaptureConfiguration,
         stopSignal: CaptureStopSignal,
-        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider()
+        deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
+        chain: Audio.Chain = .raw
     ) async throws -> CaptureAudioRecordingResult {
         try validateOutput(
             configuration.output
@@ -71,7 +74,8 @@ public struct CoreAudioRecorder: Sendable {
         let recording = CoreAudioWAVRecordingPipeline(
             device: resolved.audioInput,
             audio: configuration.audio,
-            output: configuration.output
+            output: configuration.output,
+            chain: chain
         )
 
         var startedAt = Date()
@@ -124,17 +128,24 @@ internal extension CoreAudioRecorder {
 }
 
 internal final class CoreAudioWAVRecordingPipeline: @unchecked Sendable {
-    private let sink: WAVAudioSink
+    private let sink: any CaptureAudioSink
     private let stream: CoreAudioInputStream
 
     internal init(
         device: CaptureDevice,
         audio: CaptureAudioOptions,
-        output: URL
+        output: URL,
+        chain: Audio.Chain = .raw
     ) {
-        let sink = WAVAudioSink(
+        let wav = WAVAudioSink(
             output: output
         )
+        let sink: any CaptureAudioSink = chain.isEmpty
+            ? wav
+            : ChainAudioSink(
+                downstream: wav,
+                chain: chain
+            )
 
         self.sink = sink
         self.stream = CoreAudioInputStream(

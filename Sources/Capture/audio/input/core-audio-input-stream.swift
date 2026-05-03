@@ -139,24 +139,30 @@ private extension CoreAudioInputStream {
     static func makeFormat(
         audio: CaptureAudioOptions
     ) -> AudioStreamBasicDescription {
-        let bytesPerSample = UInt32(2)
+        let bytesPerSample = UInt32(
+            audio.sample.bytes
+        )
         let channels = UInt32(
             audio.channel
         )
         let bytesPerFrame = bytesPerSample * channels
+        let flags: AudioFormatFlags = audio.sample.isFloat
+            ? kLinearPCMFormatFlagIsFloat | kLinearPCMFormatFlagIsPacked
+            : kLinearPCMFormatFlagIsSignedInteger | kLinearPCMFormatFlagIsPacked
 
         return AudioStreamBasicDescription(
             mSampleRate: Float64(
                 audio.sampleRate
             ),
             mFormatID: kAudioFormatLinearPCM,
-            mFormatFlags: kLinearPCMFormatFlagIsSignedInteger
-                | kLinearPCMFormatFlagIsPacked,
+            mFormatFlags: flags,
             mBytesPerPacket: bytesPerFrame,
             mFramesPerPacket: 1,
             mBytesPerFrame: bytesPerFrame,
             mChannelsPerFrame: channels,
-            mBitsPerChannel: 16,
+            mBitsPerChannel: UInt32(
+                audio.sample.bits
+            ),
             mReserved: 0
         )
     }
@@ -360,6 +366,7 @@ private extension CoreAudioInputStream {
             channelCount: Int(
                 format.mChannelsPerFrame
             ),
+            sample: audio.sample,
             hostTimeSeconds: inputHostTimeSeconds
         )
 
