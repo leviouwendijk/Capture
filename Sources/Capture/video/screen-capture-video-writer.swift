@@ -264,9 +264,9 @@ internal extension ScreenCaptureVideoWriter {
     static func describe(
         _ error: Error
     ) -> String {
-        let nsError = error as NSError
-
-        return "\(nsError.localizedDescription) domain=\(nsError.domain) code=\(nsError.code) userInfo=\(nsError.userInfo)"
+        CaptureErrorDescription.technical(
+            error
+        )
     }
 
     func finishWriting() async throws {

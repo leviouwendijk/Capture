@@ -48,8 +48,9 @@ internal final class ScreenCaptureSystemAudioStreamOutput: NSObject, SCStreamOut
 
         writer.fail(
             CaptureError.audioCapture(
-                Self.describe(
-                    error
+                CaptureErrorDescription.prefixed(
+                    "System audio stream stopped unexpectedly.",
+                    error: error
                 )
             )
         )

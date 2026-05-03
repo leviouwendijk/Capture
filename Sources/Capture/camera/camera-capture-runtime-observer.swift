@@ -75,7 +75,7 @@ private extension CameraCaptureRuntimeObserver {
 
         if let nsError {
             return CaptureError.videoCapture(
-                "Camera \(deviceName) capture session failed at runtime. \(describe(nsError))"
+                "Camera \(deviceName) capture session failed at runtime. \(CaptureErrorDescription.technical(nsError))"
             )
         }
 
@@ -91,11 +91,5 @@ private extension CameraCaptureRuntimeObserver {
         CaptureError.videoCapture(
             "Camera \(deviceName) capture session was interrupted. userInfo=\(String(describing: notification.userInfo))"
         )
-    }
-
-    static func describe(
-        _ error: NSError
-    ) -> String {
-        "domain=\(error.domain) code=\(error.code) description=\(error.localizedDescription) userInfo=\(error.userInfo)"
     }
 }
