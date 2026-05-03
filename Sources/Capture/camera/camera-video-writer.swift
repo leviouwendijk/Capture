@@ -172,7 +172,11 @@ internal final class CameraVideoWriter: @unchecked Sendable {
         _ error: Error
     ) {
         lock.lock()
-        failure = error
+
+        if failure == nil {
+            failure = error
+        }
+
         lock.unlock()
     }
 

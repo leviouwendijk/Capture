@@ -96,6 +96,16 @@ public final class CaptureCompositionSession: Sendable {
 
             let cameraReadiness = CaptureReadinessSignal()
 
+            async let cameraVideoResult = CameraVideoRecorder().recordVideoUntilStopped(
+                configuration: cameraVideoConfiguration,
+                stopSignal: stopSignal,
+                deviceProvider: deviceProvider,
+                readiness: cameraReadiness,
+                startupRetryPolicy: .cameraDefault
+            )
+
+            try await cameraReadiness.wait()
+
             async let screenMediaResult = ScreenCaptureMediaRecorder().recordMediaUntilStopped(
                 configuration: screenVideoConfiguration,
                 systemAudioOutput: configuration.systemAudio.enabled
@@ -105,21 +115,12 @@ public final class CaptureCompositionSession: Sendable {
                 deviceProvider: deviceProvider
             )
 
-            async let cameraVideoResult = CameraVideoRecorder().recordVideoUntilStopped(
-                configuration: cameraVideoConfiguration,
-                stopSignal: stopSignal,
-                deviceProvider: deviceProvider,
-                readiness: cameraReadiness
-            )
-
             async let audioResult = CoreAudioRecorder().recordAudioUntilStopped(
                 configuration: audioConfiguration,
                 stopSignal: stopSignal,
                 deviceProvider: deviceProvider,
                 chain: microphoneChain
             )
-
-            try await cameraReadiness.wait()
 
             await report(
                 .recordingStarted(

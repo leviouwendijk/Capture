@@ -9,6 +9,10 @@ public final class CaptureStopSignal: @unchecked Sendable {
 
     public init() {}
 
+    public var isTriggered: Bool {
+        isStopped()
+    }
+
     public func stop() {
         let capturedContinuations = drainContinuations()
 

@@ -320,3 +320,4 @@ I tried doing this with `ffmpeg`, but it caused audio underruns I could not and 
 * [-] make ins, outs, sinks reusable components
 * [ ] overwrite-confirmation, explicit --overwrite flag for override of overwrite-confirmatio step
 * [ ] fix continuity camera latent failures
+* [ ] refactor to reduce duplications

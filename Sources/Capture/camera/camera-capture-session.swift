@@ -77,8 +77,11 @@ public final class CameraCaptureSession: Sendable {
                 configuration: videoConfiguration,
                 stopSignal: stopSignal,
                 deviceProvider: deviceProvider,
-                readiness: cameraReadiness
+                readiness: cameraReadiness,
+                startupRetryPolicy: .cameraDefault
             )
+
+            try await cameraReadiness.wait()
 
             async let audioResult = CoreAudioRecorder().recordAudioUntilStopped(
                 configuration: audioConfiguration,
@@ -86,8 +89,6 @@ public final class CameraCaptureSession: Sendable {
                 deviceProvider: deviceProvider,
                 chain: microphoneChain
             )
-
-            try await cameraReadiness.wait()
 
             await report(
                 .recordingStarted(

@@ -14,7 +14,8 @@ public struct CameraVideoRecorder: Sendable {
             configuration: configuration,
             stopSignal: stopSignal,
             deviceProvider: deviceProvider,
-            readiness: nil
+            readiness: nil,
+            startupRetryPolicy: .cameraDefault
         )
     }
 }
@@ -24,7 +25,8 @@ internal extension CameraVideoRecorder {
         configuration: CaptureCameraConfiguration,
         stopSignal: CaptureStopSignal,
         deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
-        readiness: CaptureReadinessSignal?
+        readiness: CaptureReadinessSignal?,
+        startupRetryPolicy: CaptureStartupRetryPolicy = .cameraDefault
     ) async throws -> CaptureCameraVideoRecordingResult {
         try validateOutput(
             configuration.output
@@ -32,6 +34,96 @@ internal extension CameraVideoRecorder {
 
         try await ensureCameraPermission()
 
+        let attempts = max(
+            1,
+            startupRetryPolicy.attempts
+        )
+
+        var lastFailure: Error?
+
+        for attempt in 1...attempts {
+            guard !stopSignal.isTriggered else {
+                let error = CaptureError.videoCapture(
+                    "Camera startup was stopped before \(describe(configuration.camera)) became ready."
+                )
+
+                readiness?.fail(
+                    error
+                )
+
+                throw error
+            }
+
+            do {
+                return try await recordVideoAttemptUntilStopped(
+                    configuration: configuration,
+                    stopSignal: stopSignal,
+                    deviceProvider: deviceProvider,
+                    readiness: readiness
+                )
+            } catch let failure as CameraVideoAttemptFailure {
+                lastFailure = failure.underlyingError
+
+                if failure.happenedAfterReadiness || attempt == attempts {
+                    let error = failure.happenedAfterReadiness
+                        ? failure.underlyingError
+                        : CaptureError.videoCapture(
+                            "Camera startup failed after \(attempts) attempt(s). Last failure: \(describe(failure.underlyingError))"
+                        )
+
+                    readiness?.fail(
+                        error
+                    )
+
+                    throw error
+                }
+
+                if startupRetryPolicy.delayNanoseconds > 0 {
+                    try await Task.sleep(
+                        nanoseconds: startupRetryPolicy.delayNanoseconds
+                    )
+                }
+            } catch {
+                readiness?.fail(
+                    error
+                )
+
+                throw error
+            }
+        }
+
+        let error = CaptureError.videoCapture(
+            "Camera startup failed after \(attempts) attempt(s). Last failure: \(lastFailure.map(describe) ?? "unknown")."
+        )
+
+        readiness?.fail(
+            error
+        )
+
+        throw error
+    }
+}
+
+private struct CameraVideoAttemptFailure: Error {
+    let underlyingError: Error
+    let happenedAfterReadiness: Bool
+
+    init(
+        underlyingError: Error,
+        happenedAfterReadiness: Bool
+    ) {
+        self.underlyingError = underlyingError
+        self.happenedAfterReadiness = happenedAfterReadiness
+    }
+}
+
+private extension CameraVideoRecorder {
+    func recordVideoAttemptUntilStopped(
+        configuration: CaptureCameraConfiguration,
+        stopSignal: CaptureStopSignal,
+        deviceProvider: any CaptureDeviceProvider,
+        readiness: CaptureReadinessSignal?
+    ) async throws -> CaptureCameraVideoRecordingResult {
         let resolved = try await CameraCaptureDeviceResolver(
             provider: deviceProvider
         ).resolve(
@@ -42,20 +134,31 @@ internal extension CameraVideoRecorder {
             matching: resolved.videoInput
         )
 
-        let writer = try CameraVideoWriter(
+        let sink = try SegmentedCameraVideoSink(
             output: configuration.output,
             container: configuration.container,
             video: configuration.video
         )
 
+        let recordingState = CameraRecordingState()
+
         let streamOutput = CameraVideoStreamOutput(
-            writer: writer
-        )
+            sink: sink
+        ) { error in
+            sink.fail(
+                error
+            )
+
+            if recordingState.isReady {
+                stopSignal.stop()
+            }
+        }
 
         let session = AVCaptureSession()
         let videoOutput = AVCaptureVideoDataOutput()
 
         var runtimeObserver: CameraCaptureRuntimeObserver?
+        var livenessTask: Task<Void, Never>?
 
         do {
             try configure(
@@ -70,15 +173,13 @@ internal extension CameraVideoRecorder {
                 session: session,
                 deviceName: resolved.videoInput.name
             ) { error in
-                writer.fail(
+                sink.fail(
                     error
                 )
 
-                readiness?.fail(
-                    error
-                )
-
-                stopSignal.stop()
+                if recordingState.isReady {
+                    stopSignal.stop()
+                }
             }
 
             session.startRunning()
@@ -89,10 +190,21 @@ internal extension CameraVideoRecorder {
                 )
             }
 
-            try await streamOutput.waitForFirstRecordedFrame(
+            _ = try await streamOutput.waitForStableRecording(
                 timeoutSeconds: 8,
+                minimumWrittenFrameCount: stableStartupFrameCount(
+                    fps: configuration.video.fps
+                ),
                 deviceName: resolved.videoInput.name
             )
+
+            livenessTask = streamOutput.startLivenessMonitor(
+                deviceName: resolved.videoInput.name,
+                staleAfterSeconds: 3,
+                intervalSeconds: 0.25
+            )
+
+            recordingState.markReady()
 
             readiness?.ready()
 
@@ -101,11 +213,21 @@ internal extension CameraVideoRecorder {
 
             await stopSignal.wait()
 
+            livenessTask?.cancel()
+            livenessTask = nil
+
             session.stopRunning()
+
             runtimeObserver?.invalidate()
             runtimeObserver = nil
 
             let streamSnapshot = streamOutput.snapshot()
+
+            if let failureDescription = streamSnapshot.writerFailureDescription {
+                throw CaptureError.videoCapture(
+                    "Camera \(resolved.videoInput.name) failed while recording. \(failureDescription)"
+                )
+            }
 
             guard streamSnapshot.sampleCount > 0 else {
                 throw CaptureError.videoCapture(
@@ -123,10 +245,10 @@ internal extension CameraVideoRecorder {
                 startedAt
             )
 
-            let finishResult = try await writer.finish()
+            let finishResult = try await sink.finish()
 
             return CaptureCameraVideoRecordingResult(
-                output: configuration.output,
+                output: finishResult.output,
                 camera: resolved.videoInput,
                 durationSeconds: max(
                     0,
@@ -139,26 +261,42 @@ internal extension CameraVideoRecorder {
                 startedAt: startedAt,
                 startedHostTimeSeconds: startedHostTimeSeconds,
                 firstSampleAt: finishResult.firstSampleAt,
-                firstPresentationTimeSeconds: finishResult.firstPresentationTimeSeconds
+                firstPresentationTimeSeconds: finishResult.firstPresentationTimeSeconds,
+                segments: finishResult.segments
             )
         } catch {
+            livenessTask?.cancel()
             runtimeObserver?.invalidate()
-
-            readiness?.fail(
-                error
-            )
 
             if session.isRunning {
                 session.stopRunning()
             }
 
-            writer.cancel()
-            throw error
+            sink.cancel()
+
+            if error is CancellationError {
+                throw error
+            }
+
+            throw CameraVideoAttemptFailure(
+                underlyingError: error,
+                happenedAfterReadiness: recordingState.isReady
+            )
         }
     }
-}
 
-private extension CameraVideoRecorder {
+    func stableStartupFrameCount(
+        fps: Int
+    ) -> Int {
+        min(
+            12,
+            max(
+                3,
+                fps / 4
+            )
+        )
+    }
+
     func validateOutput(
         _ output: URL
     ) throws {
@@ -304,5 +442,28 @@ private extension CameraVideoRecorder {
                 fps
             )
         }
+    }
+
+    func describe(
+        _ camera: CaptureVideoInput
+    ) -> String {
+        switch camera {
+        case .systemDefault:
+            return "default camera"
+
+        case .name(let name):
+            return name
+
+        case .identifier(let identifier):
+            return identifier
+        }
+    }
+
+    func describe(
+        _ error: Error
+    ) -> String {
+        let nsError = error as NSError
+
+        return "\(nsError.localizedDescription) domain=\(nsError.domain) code=\(nsError.code) userInfo=\(nsError.userInfo)"
     }
 }

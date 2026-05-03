@@ -10,6 +10,7 @@ public struct CaptureCameraVideoRecordingResult: Sendable, Codable, Hashable {
     public let startedHostTimeSeconds: TimeInterval
     public let firstSampleAt: Date?
     public let firstPresentationTimeSeconds: Double?
+    public let segments: [CaptureCameraVideoSegment]
 
     public init(
         output: URL,
@@ -20,7 +21,8 @@ public struct CaptureCameraVideoRecordingResult: Sendable, Codable, Hashable {
         startedAt: Date,
         startedHostTimeSeconds: TimeInterval,
         firstSampleAt: Date?,
-        firstPresentationTimeSeconds: Double?
+        firstPresentationTimeSeconds: Double?,
+        segments: [CaptureCameraVideoSegment] = []
     ) {
         self.output = output
         self.camera = camera
@@ -31,5 +33,6 @@ public struct CaptureCameraVideoRecordingResult: Sendable, Codable, Hashable {
         self.startedHostTimeSeconds = startedHostTimeSeconds
         self.firstSampleAt = firstSampleAt
         self.firstPresentationTimeSeconds = firstPresentationTimeSeconds
+        self.segments = segments
     }
 }
