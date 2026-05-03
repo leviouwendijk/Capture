@@ -5,7 +5,7 @@ public struct ScreenCaptureVideoRecorder: Sendable {
 
     public func recordVideo(
         configuration: CaptureConfiguration,
-        options: CaptureVideoRecordOptions,
+        options: CaptureRecordOptions,
         deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider()
     ) async throws -> CaptureVideoRecordingResult {
         try await ScreenCaptureMediaRecorder().recordMedia(

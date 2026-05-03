@@ -24,7 +24,7 @@ public struct ScreenCaptureVideoRecordActions: Sendable {
     ) async throws -> CaptureVideoRecordingResult {
         try await recorder.recordVideo(
             configuration: configuration,
-            options: CaptureVideoRecordOptions(
+            options: CaptureRecordOptions(
                 duration: duration
             ),
             deviceProvider: deviceProvider

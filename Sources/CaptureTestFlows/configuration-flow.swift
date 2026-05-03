@@ -170,7 +170,7 @@ extension CaptureFlowSuite {
             }
 
             Step("valid audio record options parse") {
-                let options = try CaptureAudioRecordOptions(
+                let options = try CaptureRecordOptions(
                     durationSeconds: 5
                 )
 
@@ -182,7 +182,7 @@ extension CaptureFlowSuite {
             }
 
             Step("valid video record options parse") {
-                let options = try CaptureVideoRecordOptions(
+                let options = try CaptureRecordOptions(
                     durationSeconds: 5
                 )
 
@@ -203,6 +203,20 @@ extension CaptureFlowSuite {
                     5,
                     "record.duration"
                 )
+            }
+
+            Step("missing output throws") {
+                try Expect.throwsError(
+                    "configuration.missing-output"
+                ) {
+                    _ = try CaptureConfiguration(
+                        video: CaptureVideoOptions(),
+                        audio: CaptureAudioOptions(),
+                        output: URL(
+                            fileURLWithPath: ""
+                        )
+                    )
+                }
             }
 
             Step("invalid video size throws") {
@@ -256,11 +270,11 @@ extension CaptureFlowSuite {
                 }
             }
 
-            Step("invalid audio record duration throws") {
+            Step("invalid record duration throws") {
                 try Expect.throwsError(
-                    "audio-record.invalid-duration"
+                    "record.invalid-duration"
                 ) {
-                    _ = try CaptureAudioRecordOptions(
+                    _ = try CaptureRecordOptions(
                         durationSeconds: 0
                     )
                 }
@@ -270,7 +284,7 @@ extension CaptureFlowSuite {
                 try Expect.throwsError(
                     "video-record.invalid-duration"
                 ) {
-                    _ = try CaptureVideoRecordOptions(
+                    _ = try CaptureRecordOptions(
                         durationSeconds: 0
                     )
                 }

@@ -16,15 +16,15 @@ public struct CaptureCameraConfiguration: Sendable, Codable, Hashable {
         container: CaptureContainer = .mov,
         output: URL
     ) throws {
-        guard !output.path.isEmpty else {
-            throw CaptureError.missingOutput
-        }
+        let output = try CaptureFileOutput(
+            output
+        )
 
         self.camera = camera
         self.video = video
         self.audio = audio
         self.audioMix = audioMix
         self.container = container
-        self.output = output
+        self.output = output.url
     }
 }

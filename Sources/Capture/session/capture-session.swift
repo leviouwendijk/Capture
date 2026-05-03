@@ -27,18 +27,16 @@ public final class CaptureSession: Sendable {
 
     @discardableResult
     public func start() async throws -> CaptureRecordingResult {
-        let stopSignal = CaptureStopSignal()
+        let timedStop = CaptureTimedStopSignal(
+            duration: options.duration
+        )
 
-        Task {
-            try? await Task.sleep(
-                nanoseconds: UInt64(options.durationSeconds) * 1_000_000_000
-            )
-
-            stopSignal.stop()
+        defer {
+            timedStop.cancel()
         }
 
         return try await startUntilStopped(
-            stopSignal: stopSignal
+            stopSignal: timedStop.stopSignal
         )
     }
 

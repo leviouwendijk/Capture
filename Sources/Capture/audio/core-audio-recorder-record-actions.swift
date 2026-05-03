@@ -25,7 +25,7 @@ public struct CoreAudioRecordActions: Sendable {
     ) async throws -> CaptureAudioRecordingResult {
         try await recorder.recordAudio(
             configuration: configuration,
-            options: CaptureAudioRecordOptions(
+            options: CaptureRecordOptions(
                 duration: duration
             ),
             deviceProvider: deviceProvider,

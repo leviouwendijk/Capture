@@ -10,7 +10,7 @@ internal struct ScreenCaptureMediaRecorder: Sendable {
     internal func recordMedia(
         configuration: CaptureConfiguration,
         systemAudioOutput: URL?,
-        options: CaptureVideoRecordOptions,
+        options: CaptureRecordOptions,
         deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider()
     ) async throws -> CaptureScreenMediaRecordingResult {
         let stopSignal = CaptureStopSignal()

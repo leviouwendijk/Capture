@@ -18,9 +18,9 @@ public struct CaptureConfiguration: Sendable, Codable, Hashable {
         container: CaptureContainer = .mov,
         output: URL
     ) throws {
-        guard !output.path.isEmpty else {
-            throw CaptureError.missingOutput
-        }
+        let output = try CaptureFileOutput(
+            output
+        )
 
         self.display = display
         self.video = video
@@ -28,6 +28,6 @@ public struct CaptureConfiguration: Sendable, Codable, Hashable {
         self.systemAudio = systemAudio
         self.audioMix = audioMix
         self.container = container
-        self.output = output
+        self.output = output.url
     }
 }

@@ -27,6 +27,7 @@ public struct CaptureSessionRecordActions: Sendable {
             ),
             workspace: session.workspace,
             deviceProvider: session.deviceProvider,
+            microphoneChain: session.microphoneChain,
             progress: session.progress
         ).start()
     }
@@ -84,6 +85,7 @@ public struct CameraCaptureSessionRecordActions: Sendable {
             ),
             workspace: session.workspace,
             deviceProvider: session.deviceProvider,
+            microphoneChain: session.microphoneChain,
             progress: session.progress
         ).start()
     }
@@ -141,6 +143,7 @@ public struct CaptureCompositionSessionRecordActions: Sendable {
             ),
             workspace: session.workspace,
             deviceProvider: session.deviceProvider,
+            microphoneChain: session.microphoneChain,
             progress: session.progress
         ).start()
     }

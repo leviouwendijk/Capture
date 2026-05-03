@@ -5,7 +5,7 @@ public struct CoreAudioRecorder: Sendable {
 
     public func recordAudio(
         configuration: CaptureConfiguration,
-        options: CaptureAudioRecordOptions,
+        options: CaptureRecordOptions,
         deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
         chain: AudioChain = .raw
     ) async throws -> CaptureAudioRecordingResult {
