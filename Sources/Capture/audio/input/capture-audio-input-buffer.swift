@@ -190,6 +190,74 @@ public extension CaptureAudioInputBuffer {
             hostTimeSeconds: hostTimeSeconds
         )
     }
+
+    func mapFloatSamplesWithChannel(
+        _ transform: (Float, Int) throws -> Float
+    ) rethrows -> CaptureAudioInputBuffer {
+        guard !data.isEmpty else {
+            return self
+        }
+
+        let totalSamples = min(
+            frameCount * channelCount,
+            data.count / sample.bytes
+        )
+
+        guard totalSamples > 0 else {
+            return self
+        }
+
+        let resolvedChannelCount = max(
+            1,
+            channelCount
+        )
+
+        var output = Array(
+            repeating: UInt8(0),
+            count: totalSamples * sample.bytes
+        )
+
+        try data.withUnsafeBytes { inputBytes in
+            guard let input = inputBytes.bindMemory(
+                to: UInt8.self
+            ).baseAddress else {
+                return
+            }
+
+            for sampleIndex in 0..<totalSamples {
+                let offset = sampleIndex * sample.bytes
+                let channel = sampleIndex % resolvedChannelCount
+                let value = Self.readFloat(
+                    from: input,
+                    offset: offset,
+                    sample: sample
+                )
+                let processed = try transform(
+                    value,
+                    channel
+                )
+
+                Self.writeFloat(
+                    processed,
+                    to: &output,
+                    offset: offset,
+                    sample: sample
+                )
+            }
+        }
+
+        return CaptureAudioInputBuffer(
+            data: Data(
+                output
+            ),
+            frameCount: frameCount,
+            packetCount: packetCount,
+            sampleRate: sampleRate,
+            channelCount: channelCount,
+            sample: sample,
+            hostTimeSeconds: hostTimeSeconds
+        )
+    }
 }
 
 private extension CaptureAudioInputBuffer {

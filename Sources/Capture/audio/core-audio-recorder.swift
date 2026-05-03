@@ -7,7 +7,7 @@ public struct CoreAudioRecorder: Sendable {
         configuration: CaptureConfiguration,
         options: CaptureAudioRecordOptions,
         deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
-        chain: Audio.Chain = .raw
+        chain: AudioChain = .raw
     ) async throws -> CaptureAudioRecordingResult {
         try validateOutput(
             configuration.output
@@ -59,7 +59,7 @@ public struct CoreAudioRecorder: Sendable {
         configuration: CaptureConfiguration,
         stopSignal: CaptureStopSignal,
         deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
-        chain: Audio.Chain = .raw
+        chain: AudioChain = .raw
     ) async throws -> CaptureAudioRecordingResult {
         try validateOutput(
             configuration.output
@@ -135,7 +135,7 @@ internal final class CoreAudioWAVRecordingPipeline: @unchecked Sendable {
         device: CaptureDevice,
         audio: CaptureAudioOptions,
         output: URL,
-        chain: Audio.Chain = .raw
+        chain: AudioChain = .raw
     ) {
         let wav = WAVAudioSink(
             output: output

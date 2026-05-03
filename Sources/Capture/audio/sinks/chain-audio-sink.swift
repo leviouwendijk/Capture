@@ -5,11 +5,11 @@ internal final class ChainAudioSink: CaptureAudioSink, @unchecked Sendable {
     private let downstream: any CaptureAudioSink
     private let lock = NSLock()
 
-    private var chain: Audio.Chain
+    private var chain: AudioChain
 
     internal init(
         downstream: any CaptureAudioSink,
-        chain: Audio.Chain
+        chain: AudioChain
     ) {
         self.downstream = downstream
         self.chain = chain

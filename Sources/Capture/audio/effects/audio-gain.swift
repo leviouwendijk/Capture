@@ -1,11 +1,25 @@
 import Foundation
 
-public extension Audio.Effects {
-    struct Gain: Audio.Processor {
+public enum AudioGain {}
+
+public struct AudioGainFactory: Sendable {
+    public init() {}
+
+    public func standard(
+        _ amount: Float = 1
+    ) -> AudioGain.Standard {
+        AudioGain.Standard(
+            amount
+        )
+    }
+}
+
+public extension AudioGain {
+    struct Standard: AudioProcessor {
         public let amount: Float
 
         public init(
-            _ amount: Float
+            _ amount: Float = 1
         ) {
             self.amount = amount
         }

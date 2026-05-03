@@ -1,3 +1,1 @@
-public enum Audio {
-    public enum Effects {}
-}
+public enum Audio {}

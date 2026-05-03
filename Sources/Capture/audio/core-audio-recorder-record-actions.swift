@@ -21,7 +21,7 @@ public struct CoreAudioRecordActions: Sendable {
         _ duration: CaptureRecordDuration,
         configuration: CaptureConfiguration,
         deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
-        chain: Audio.Chain = .raw
+        chain: AudioChain = .raw
     ) async throws -> CaptureAudioRecordingResult {
         try await recorder.recordAudio(
             configuration: configuration,
@@ -37,7 +37,7 @@ public struct CoreAudioRecordActions: Sendable {
         configuration: CaptureConfiguration,
         stopSignal: CaptureStopSignal,
         deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
-        chain: Audio.Chain = .raw
+        chain: AudioChain = .raw
     ) async throws -> CaptureAudioRecordingResult {
         try await recorder.recordAudioUntilStopped(
             configuration: configuration,
@@ -52,7 +52,7 @@ public struct CoreAudioRecordActions: Sendable {
         configuration: CaptureConfiguration,
         stopSignal: CaptureStopSignal,
         deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
-        chain: Audio.Chain = .raw
+        chain: AudioChain = .raw
     ) async throws -> CaptureAudioRecordingResult {
         switch mode {
         case .live:

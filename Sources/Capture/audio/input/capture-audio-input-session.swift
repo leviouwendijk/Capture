@@ -12,14 +12,14 @@ public final class CaptureAudioInputSession: @unchecked Sendable {
     private let lock = NSLock()
     private let chainLock = NSLock()
 
-    private var chain: Audio.Chain
+    private var chain: AudioChain
     private var stream: CoreAudioInputStream?
     private var startResult: CaptureAudioInputStartResult?
 
     public init(
         audio: CaptureAudioOptions,
         deviceProvider: any CaptureDeviceProvider = MacCaptureDeviceProvider(),
-        chain: Audio.Chain = .raw,
+        chain: AudioChain = .raw,
         handler: @escaping CaptureAudioInputHandler
     ) {
         self.audio = audio

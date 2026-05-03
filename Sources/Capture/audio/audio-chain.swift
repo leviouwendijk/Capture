@@ -1,108 +1,106 @@
 import Foundation
 
-public extension Audio {
-    protocol Processor: Sendable {
-        mutating func process(
-            _ buffer: CaptureAudioInputBuffer
-        ) throws -> CaptureAudioInputBuffer
+public protocol AudioProcessor: Sendable {
+    mutating func process(
+        _ buffer: CaptureAudioInputBuffer
+    ) throws -> CaptureAudioInputBuffer
+}
+
+public struct AudioChain: Sendable {
+    private var processors: [any AudioProcessor]
+
+    public init(
+        processors: [any AudioProcessor] = []
+    ) {
+        self.processors = processors
     }
 
-    struct Chain: Sendable {
-        private var processors: [any Audio.Processor]
+    public init(
+        @AudioChainBuilder _ build: () -> [any AudioProcessor]
+    ) {
+        self.init(
+            processors: build()
+        )
+    }
 
-        public init(
-            processors: [any Audio.Processor] = []
-        ) {
-            self.processors = processors
-        }
+    public static var raw: AudioChain {
+        AudioChain()
+    }
 
-        public init(
-            @Audio.Builder _ build: () -> [any Audio.Processor]
-        ) {
-            self.init(
-                processors: build()
+    public var isEmpty: Bool {
+        processors.isEmpty
+    }
+
+    public mutating func append(
+        _ processor: any AudioProcessor
+    ) {
+        processors.append(
+            processor
+        )
+    }
+
+    public mutating func process(
+        _ buffer: CaptureAudioInputBuffer
+    ) throws -> CaptureAudioInputBuffer {
+        var current = buffer
+
+        for index in processors.indices {
+            current = try processors[index].process(
+                current
             )
         }
 
-        public static var raw: Audio.Chain {
-            Audio.Chain()
-        }
+        return current
+    }
+}
 
-        public var isEmpty: Bool {
-            processors.isEmpty
-        }
+@resultBuilder
+public enum AudioChainBuilder {
+    public static func buildExpression(
+        _ processor: any AudioProcessor
+    ) -> [any AudioProcessor] {
+        [
+            processor,
+        ]
+    }
 
-        public mutating func append(
-            _ processor: any Audio.Processor
-        ) {
-            processors.append(
-                processor
-            )
-        }
+    public static func buildExpression(
+        _ processors: [any AudioProcessor]
+    ) -> [any AudioProcessor] {
+        processors
+    }
 
-        public mutating func process(
-            _ buffer: CaptureAudioInputBuffer
-        ) throws -> CaptureAudioInputBuffer {
-            var current = buffer
-
-            for index in processors.indices {
-                current = try processors[index].process(
-                    current
-                )
-            }
-
-            return current
+    public static func buildBlock(
+        _ parts: [any AudioProcessor]...
+    ) -> [any AudioProcessor] {
+        parts.flatMap {
+            $0
         }
     }
 
-    @resultBuilder
-    enum Builder {
-        public static func buildExpression(
-            _ processor: any Audio.Processor
-        ) -> [any Audio.Processor] {
-            [
-                processor,
-            ]
-        }
+    public static func buildOptional(
+        _ processors: [any AudioProcessor]?
+    ) -> [any AudioProcessor] {
+        processors ?? []
+    }
 
-        public static func buildExpression(
-            _ processors: [any Audio.Processor]
-        ) -> [any Audio.Processor] {
-            processors
-        }
+    public static func buildEither(
+        first processors: [any AudioProcessor]
+    ) -> [any AudioProcessor] {
+        processors
+    }
 
-        public static func buildBlock(
-            _ parts: [any Audio.Processor]...
-        ) -> [any Audio.Processor] {
-            parts.flatMap {
-                $0
-            }
-        }
+    public static func buildEither(
+        second processors: [any AudioProcessor]
+    ) -> [any AudioProcessor] {
+        processors
+    }
 
-        public static func buildOptional(
-            _ processors: [any Audio.Processor]?
-        ) -> [any Audio.Processor] {
-            processors ?? []
-        }
-
-        public static func buildEither(
-            first processors: [any Audio.Processor]
-        ) -> [any Audio.Processor] {
-            processors
-        }
-
-        public static func buildEither(
-            second processors: [any Audio.Processor]
-        ) -> [any Audio.Processor] {
-            processors
-        }
-
-        public static func buildArray(
-            _ processors: [[any Audio.Processor]]
-        ) -> [any Audio.Processor] {
-            processors.flatMap {
-                $0
-            }
+    public static func buildArray(
+        _ processors: [[any AudioProcessor]]
+    ) -> [any AudioProcessor] {
+        processors.flatMap {
+            $0
         }
     }
 }
