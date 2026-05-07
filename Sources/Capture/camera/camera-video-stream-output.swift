@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreMedia
 import Foundation
 
 internal struct CameraVideoStreamSnapshot: Sendable, Hashable {

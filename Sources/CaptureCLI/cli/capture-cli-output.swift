@@ -540,6 +540,10 @@ private extension CaptureCLI {
                 "\(result.videoFrameCount)"
             ),
             .init(
+                "video segments",
+                "\(max(1, result.videoSegments.count))"
+            ),
+            .init(
                 "audio tracks",
                 "\(result.audioTrackCount)"
             ),

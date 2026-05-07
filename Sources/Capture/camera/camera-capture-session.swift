@@ -166,6 +166,7 @@ public final class CameraCaptureSession: Sendable {
                 output: configuration.output,
                 durationSeconds: capturedDurationSeconds,
                 videoFrameCount: capturedVideoResult.frameCount,
+                videoSegments: capturedVideoResult.segments,
                 video: capturedVideoResult.video,
                 camera: capturedVideoResult.camera,
                 audioInput: capturedAudioResult.device,
