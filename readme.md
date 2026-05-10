@@ -274,6 +274,23 @@ capturer compose \
     --workdir /Volumes/FastScratch/Capture
 ```
 
+Use continuity camera, and a vocal chain:
+
+```sh
+capturer compose \
+    --camera "levi-iphone-16-pro Camera" \
+    --audio ext-in \
+    --layout overlay \
+    --overlay-width 0.24 \
+    --overlay-x right \
+    --overlay-y bottom \
+    --system-audio \
+    --system-gain 0.50 \
+    --output ~/main/rec/vid/test.mov \
+    --workdir ~/main/rec/vid \
+    --mic-chain voice
+```
+
 Record video only:
 
 ```sh

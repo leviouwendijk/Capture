@@ -63,6 +63,14 @@ public final class CaptureCompositionSession: Sendable {
                 "system-audio.m4a"
             )
 
+            let powerAssertion = try CapturePowerAssertion(
+                reason: "Capture composition recording active"
+            )
+
+            defer {
+                powerAssertion.release()
+            }
+
             let screenVideoConfiguration = try CaptureConfiguration(
                 display: configuration.display,
                 video: configuration.video,

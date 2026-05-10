@@ -74,6 +74,14 @@ public struct ScreenCaptureSystemAudioRecorder: Sendable {
             sampleHandlerQueue: streamOutput.queue
         )
 
+        let powerAssertion = try CapturePowerAssertion(
+            reason: "Capture system audio recording active"
+        )
+
+        defer {
+            powerAssertion.release()
+        }
+
         let startedAt = Date()
         let startedHostTimeSeconds = CaptureClock.hostTimeSeconds()
         var streamDidStart = false

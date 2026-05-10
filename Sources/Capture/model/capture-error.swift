@@ -16,6 +16,7 @@ public enum CaptureError: Error, Sendable, LocalizedError, Equatable {
     case audioCapture(String)
     case videoCapture(String)
     case recordingNotImplemented(String)
+    case powerAssertion(String)
 
     public var errorDescription: String? {
         switch self {
@@ -63,6 +64,9 @@ public enum CaptureError: Error, Sendable, LocalizedError, Equatable {
 
         case .recordingNotImplemented(let message):
             return message
+
+        case let .powerAssertion(message):
+            return "Power assertion failed: \(message)"
         }
     }
 }

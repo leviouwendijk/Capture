@@ -26,6 +26,14 @@ public struct CoreAudioRecorder: Sendable {
             chain: chain
         )
 
+        let powerAssertion = try CapturePowerAssertion(
+            reason: "Capture audio recording active"
+        )
+
+        defer {
+            powerAssertion.release()
+        }
+
         var startedAt = Date()
         var startedHostTimeSeconds = CaptureClock.hostTimeSeconds()
 
@@ -77,6 +85,14 @@ public struct CoreAudioRecorder: Sendable {
             output: configuration.output,
             chain: chain
         )
+
+        let powerAssertion = try CapturePowerAssertion(
+            reason: "Capture audio recording active"
+        )
+
+        defer {
+            powerAssertion.release()
+        }
 
         var startedAt = Date()
         var startedHostTimeSeconds = CaptureClock.hostTimeSeconds()

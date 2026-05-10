@@ -140,6 +140,14 @@ private extension CameraVideoRecorder {
             video: configuration.video
         )
 
+        let powerAssertion = try CapturePowerAssertion(
+            reason: "Capture camera video recording active"
+        )
+
+        defer {
+            powerAssertion.release()
+        }
+
         let recordingState = CameraRecordingState()
 
         let streamOutput = CameraVideoStreamOutput(
